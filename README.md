@@ -25,6 +25,14 @@ The installer opens hyprmoncfg through its hidden Omarchy desktop launcher after
 - Omarchy Quattro with third-party shell plugins
 - hyprmoncfg 1.12.0 or newer (installed from the panel when missing)
 
+## Remove
+
+```sh
+omarchy plugin remove crmne.hyprmoncfg
+```
+
+Removing the plugin leaves hyprmoncfg and its saved profiles in place. To stop automatic switching first, turn off **Managed by hyprmoncfg** in the panel. Remove the AUR package separately only if you no longer use hyprmoncfg.
+
 ## Development
 
 ```sh
