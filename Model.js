@@ -1,5 +1,5 @@
 function installCommand() {
-  return "omarchy pkg aur add hyprmoncfg && systemctl --user enable --now hyprmoncfgd"
+  return "omarchy pkg aur add hyprmoncfg && systemctl --user enable hyprmoncfgd && systemctl --user restart hyprmoncfgd"
 }
 
 function installProcessArgs() {

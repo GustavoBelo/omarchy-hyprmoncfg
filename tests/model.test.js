@@ -12,7 +12,7 @@ test("installation uses Omarchy's presented AUR flow and enables the daemon", ()
     "terminal",
     "with",
     "presentation",
-    "omarchy pkg aur add hyprmoncfg && systemctl --user enable --now hyprmoncfgd"
+    "omarchy pkg aur add hyprmoncfg && systemctl --user enable hyprmoncfgd && systemctl --user restart hyprmoncfgd"
   ])
 })
 

@@ -13,7 +13,7 @@ omarchy plugin add https://github.com/crmne/omarchy-hyprmoncfg.git --enable
 If hyprmoncfg is missing, open the panel and choose **Install hyprmoncfg**. Omarchy opens its normal presented terminal and runs:
 
 ```sh
-omarchy pkg aur add hyprmoncfg && systemctl --user enable --now hyprmoncfgd
+omarchy pkg aur add hyprmoncfg && systemctl --user enable hyprmoncfgd && systemctl --user restart hyprmoncfgd
 ```
 
 The plugin never runs `yay` or requests privileges invisibly inside `omarchy-shell`.
