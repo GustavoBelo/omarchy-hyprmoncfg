@@ -593,7 +593,7 @@ Panel {
                 }
 
                 Column {
-                  width: parent.width - parent.children[0].width - profileAutoLabel.implicitWidth - parent.spacing * 2
+                  width: parent.width - parent.children[0].width - profileStateLabel.implicitWidth - parent.spacing * 2
                   anchors.verticalCenter: parent.verticalCenter
                   spacing: Style.space(2)
 
@@ -618,13 +618,12 @@ Panel {
                 }
 
                 Text {
-                  id: profileAutoLabel
+                  id: profileStateLabel
                   anchors.verticalCenter: parent.verticalCenter
-                  text: root.activeProfile !== "" && root.activeProfile === root.recommendedProfile ? "AUTO" : "LIVE"
+                  text: root.activeProfile !== "" ? "󰄬" : ""
                   color: root.dim
                   font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                  font.bold: true
+                  font.pixelSize: Style.font.icon
                 }
               }
             }
@@ -743,7 +742,7 @@ Panel {
               rowIndex: root.profilesExpanded ? root.profiles.length + 1 : 1
               icon: "󰆍"
               title: "Open layout editor"
-              subtitle: "Arrange displays, save profiles, and set workspaces"
+              subtitle: "Arrange displays and manage profiles"
               onActivated: root.launchTui()
             }
           }
