@@ -73,6 +73,7 @@ Panel {
     && !connectionGrace
     && !serviceActionPending
   readonly property string socketPath: String(Quickshell.env("XDG_RUNTIME_DIR") || "") + "/hyprmoncfgd.sock"
+  readonly property string installFailurePath: String(Quickshell.env("XDG_RUNTIME_DIR") || "") + "/hyprmoncfg-panel-install.failed"
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color dim: Qt.darker(foreground, 1.5)
   readonly property color urgent: bar ? bar.urgent : Color.urgent
@@ -103,7 +104,13 @@ Panel {
   function checkInstallation() {
     if (whichProcess.running) return
     root.checkingInstallation = true
-    whichProcess.command = ["sh", "-c", "command -v hyprmoncfg >/dev/null 2>&1 && hyprmoncfg version"]
+    whichProcess.command = [
+      "sh",
+      "-c",
+      "if command -v hyprmoncfg >/dev/null 2>&1; then hyprmoncfg version; elif test -f \"$1\"; then cat \"$1\"; exit 2; else exit 1; fi",
+      "sh",
+      root.installFailurePath
+    ]
     whichProcess.running = true
   }
 
@@ -119,6 +126,7 @@ Panel {
     installerProcess.command = Model.installProcessArgs()
     installerProcess.startDetached()
     installPoll.restart()
+    installTimeout.restart()
   }
 
   function setManaged(enabled) {
@@ -265,7 +273,15 @@ Panel {
       root.compatible = root.installed && Model.versionAtLeast(versionOutput.text, "1.12.0")
       if (root.compatible) {
         root.installing = false
+        installTimeout.stop()
         root.checkServiceState()
+      } else if (exitCode === 2 && root.installing) {
+        root.installing = false
+        installPoll.stop()
+        installTimeout.stop()
+        root.lastError = String(versionOutput.text || "").trim() === "130"
+          ? "Installation was canceled."
+          : "Installation did not finish. Check the Omarchy terminal and try again."
       } else {
         backendSocket.connected = false
         root.serviceStateKnown = false
@@ -347,6 +363,17 @@ Panel {
     repeat: true
     running: root.installing && !root.compatible
     onTriggered: root.checkInstallation()
+  }
+
+  Timer {
+    id: installTimeout
+    interval: 300000
+    onTriggered: {
+      if (!root.installing) return
+      root.installing = false
+      installPoll.stop()
+      root.lastError = "Installation is still waiting. Check the Omarchy terminal and try again."
+    }
   }
 
   Timer {

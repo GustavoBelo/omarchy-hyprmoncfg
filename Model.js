@@ -1,5 +1,5 @@
 function installCommand() {
-  return "omarchy pkg aur add hyprmoncfg && systemctl --user enable --now hyprmoncfgd.service && setsid gtk-launch hyprmoncfg-omarchy >/dev/null 2>&1 &"
+  return "rm -f \"$XDG_RUNTIME_DIR/hyprmoncfg-panel-install.failed\"; status=0; omarchy pkg aur add hyprmoncfg && systemctl --user enable --now hyprmoncfgd.service && setsid -f gtk-launch hyprmoncfg-omarchy >/dev/null 2>&1 || status=$?; if (( status != 0 )); then printf '%s\\n' \"$status\" > \"$XDG_RUNTIME_DIR/hyprmoncfg-panel-install.failed\"; fi; (exit \"$status\")"
 }
 
 function installProcessArgs() {

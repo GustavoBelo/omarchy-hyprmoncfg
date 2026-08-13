@@ -15,7 +15,7 @@ omarchy plugin add https://github.com/crmne/omarchy-hyprmoncfg.git --enable
 If hyprmoncfg is missing, open the panel and choose **Install hyprmoncfg**. Omarchy opens its normal presented terminal and runs:
 
 ```sh
-omarchy pkg aur add hyprmoncfg && systemctl --user enable --now hyprmoncfgd.service && setsid gtk-launch hyprmoncfg-omarchy >/dev/null 2>&1 &
+omarchy pkg aur add hyprmoncfg && systemctl --user enable --now hyprmoncfgd.service && setsid -f gtk-launch hyprmoncfg-omarchy >/dev/null 2>&1
 ```
 
 The installer opens hyprmoncfg through its hidden Omarchy desktop launcher after starting the daemon. That launcher ships with the main package and carries Omarchy's standard `TUI.float` window identity, so the editor opens centered at the normal floating size without putting Omarchy-specific window logic in the panel. Saving a profile updates the panel immediately over IPC. The plugin never runs `yay` or requests privileges invisibly inside `omarchy-shell`.

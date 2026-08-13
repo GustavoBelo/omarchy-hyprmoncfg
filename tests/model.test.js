@@ -12,8 +12,17 @@ test("installation uses Omarchy's presented AUR flow and opens a centered TUI", 
     "terminal",
     "with",
     "presentation",
-    "omarchy pkg aur add hyprmoncfg && systemctl --user enable --now hyprmoncfgd.service && setsid gtk-launch hyprmoncfg-omarchy >/dev/null 2>&1 &"
+    "rm -f \"$XDG_RUNTIME_DIR/hyprmoncfg-panel-install.failed\"; status=0; omarchy pkg aur add hyprmoncfg && systemctl --user enable --now hyprmoncfgd.service && setsid -f gtk-launch hyprmoncfg-omarchy >/dev/null 2>&1 || status=$?; if (( status != 0 )); then printf '%s\\n' \"$status\" > \"$XDG_RUNTIME_DIR/hyprmoncfg-panel-install.failed\"; fi; (exit \"$status\")"
   ])
+})
+
+test("installation failure is observable and cannot leave the panel spinning forever", () => {
+  const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
+  assert.match(qml, /hyprmoncfg-panel-install\.failed/)
+  assert.match(qml, /exitCode === 2 && root\.installing/)
+  assert.match(qml, /id: installTimeout/)
+  assert.match(qml, /interval: 300000/)
+  assert.doesNotMatch(Model.installCommand(), /&\s*$/)
 })
 
 test("missing hyprmoncfg gets a focused onboarding screen", () => {
