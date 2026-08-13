@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "crmne.hyprmoncfg",
+  "name": "hyprmoncfg",
+  "version": "1.0.0",
+  "author": "Carmine Paolino",
+  "license": "MIT",
+  "description": "Monitor profiles with automatic switching on monitor hotplug.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "hyprmoncfg",
+    "description": "Switch monitor profiles and see the active layout.",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  },
+  "hyprmoncfg": {
+    "package": "hyprmoncfg",
+    "minimumVersion": "1.11.0",
+    "protocolVersion": 1
+  }
+}
