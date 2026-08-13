@@ -1,6 +1,6 @@
 # hyprmoncfg for Omarchy
 
-An Omarchy bar panel for [hyprmoncfg](https://hyprmoncfg.dev/). It shows the active monitor profile, switches saved profiles safely, and receives live updates from `hyprmoncfgd` over its Unix-socket IPC protocol.
+An Omarchy bar panel for [hyprmoncfg](https://hyprmoncfg.dev/). It shows the active monitor profile and live display topology, keeps manual profile switching close at hand, and receives live updates from `hyprmoncfgd` over its Unix-socket IPC protocol.
 
 The panel is intentionally the full hyprmoncfg experience: it installs the stable AUR package, enables the user daemon, and uses automatic switching on monitor hotplug.
 

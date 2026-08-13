@@ -33,12 +33,26 @@ Panel {
   property bool transactionActionPending: false
   property bool overwritePrompt: false
   property string overwriteProfile: ""
+  property bool profilesExpanded: false
   property int cursorIndex: 0
   property bool cursorActive: false
 
   readonly property var profiles: document && document.profiles instanceof Array ? document.profiles : []
-  readonly property int monitorCount: document && document.monitors instanceof Array ? document.monitors.length : Quickshell.screens.length
+  readonly property var liveScreens: Quickshell.screens || []
+  readonly property var layoutBounds: Model.layoutBounds(liveScreens)
+  readonly property int monitorCount: liveScreens.length > 0
+    ? liveScreens.length
+    : (document && document.monitors instanceof Array ? document.monitors.length : 0)
   readonly property string activeProfile: document && document.active_profile ? String(document.active_profile.name || "") : ""
+  readonly property string recommendedProfile: document && document.recommended_profile ? String(document.recommended_profile.name || "") : ""
+  readonly property string profileStatusTitle: activeProfile !== "" ? activeProfile : "Custom layout"
+  readonly property string profileStatusSubtitle: {
+    var displays = monitorCount === 1 ? "1 display" : monitorCount + " displays"
+    if (activeProfile !== "" && activeProfile === recommendedProfile)
+      return "Selected automatically · " + displays
+    if (recommendedProfile !== "") return "Automatic match: " + recommendedProfile
+    return displays + " · Waiting for a matching profile"
+  }
   readonly property string socketPath: String(Quickshell.env("XDG_RUNTIME_DIR") || "") + "/hyprmoncfgd.sock"
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color dim: Qt.darker(foreground, 1.5)
@@ -49,6 +63,7 @@ Panel {
     root.controller.show()
     root.cursorActive = false
     root.cursorIndex = 0
+    root.profilesExpanded = false
     root.checkInstallation()
     if (root.compatible) root.connectBackend()
   }
@@ -219,7 +234,7 @@ Panel {
   function itemCount() {
     if (!root.compatible || !root.backendConnected) return 1
     if (root.overwritePrompt || root.pendingTransaction !== "") return 2
-    return root.profiles.length + 1
+    return root.profilesExpanded ? root.profiles.length + 2 : 2
   }
 
   function moveCursor(delta) {
@@ -246,8 +261,23 @@ Panel {
       else root.revertProfile()
       return
     }
-    if (root.cursorIndex < root.profiles.length) root.applyProfile(root.profiles[root.cursorIndex].name, false)
-    else root.launchTui()
+    if (!root.profilesExpanded) {
+      if (root.cursorIndex === 0) {
+        root.profilesExpanded = true
+        root.cursorIndex = 0
+      } else {
+        root.launchTui()
+      }
+      return
+    }
+    if (root.cursorIndex === 0) {
+      root.profilesExpanded = false
+      root.cursorIndex = 0
+    } else if (root.cursorIndex <= root.profiles.length) {
+      root.applyProfile(root.profiles[root.cursorIndex - 1].name, false)
+    } else {
+      root.launchTui()
+    }
   }
 
   Component.onCompleted: root.checkInstallation()
@@ -345,7 +375,7 @@ Panel {
     owner: root.barIdentity
     bar: root.bar
     open: root.opened
-    centerOnBar: true
+    centerOnBar: false
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(380))
     contentHeight: panel.fittedContentHeight(contentColumn.implicitHeight)
@@ -374,9 +404,9 @@ Panel {
 
           PanelHero {
             width: parent.width
-            title: "hyprmoncfg"
-            meta: root.backendConnected ? "Automatic switching on monitor hotplug" : "Monitor profiles for Hyprland"
-            detail: root.backendConnected ? "ON" : ""
+            title: "Display"
+            meta: "hyprmoncfg"
+            detail: root.backendConnected ? "AUTO" : ""
             foreground: root.foreground
             fontFamily: root.fontFamily
             iconComponent: Component {
@@ -393,23 +423,13 @@ Panel {
                 }
 
                 Rectangle {
-                  width: Style.space(15)
+                  visible: root.backendConnected
+                  width: Math.max(4, Style.space(4))
                   height: width
                   radius: width / 2
-                  anchors.top: parent.top
-                  anchors.right: parent.right
-                  color: root.backendConnected ? Color.accent : Color.background
-                  border.width: 1
-                  border.color: root.backendConnected ? Color.accent : root.foreground
-
-                  Text {
-                    anchors.centerIn: parent
-                    text: "H"
-                    color: root.backendConnected ? Color.background : root.foreground
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.caption
-                    font.bold: true
-                  }
+                  anchors.centerIn: parent
+                  anchors.verticalCenterOffset: -2
+                  color: Color.accent
                 }
               }
             }
@@ -540,34 +560,136 @@ Panel {
           Column {
             visible: root.backendConnected && !root.overwritePrompt && root.pendingTransaction === ""
             width: parent.width
-            spacing: Style.space(6)
+            spacing: Style.space(10)
 
             PanelSectionHeader {
-              text: "PROFILES"
+              text: "PROFILE"
               foreground: root.foreground
               fontFamily: root.fontFamily
             }
 
-            Text {
-              visible: root.profiles.length === 0
+            CursorSurface {
               width: parent.width
-              text: "No monitor profiles yet. Open the layout editor to create one."
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              wrapMode: Text.WordWrap
+              current: root.activeProfile !== ""
+              bordered: root.activeProfile === ""
+              foreground: root.foreground
+              implicitHeight: profileStatusContent.implicitHeight + Style.spacing.rowPaddingX
+
+              Row {
+                id: profileStatusContent
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: Style.space(12)
+                anchors.rightMargin: Style.space(12)
+                spacing: Style.space(12)
+
+                Text {
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: root.monitorCount > 1 ? "󰍺" : "󰍹"
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.icon
+                }
+
+                Column {
+                  width: parent.width - parent.children[0].width - profileAutoLabel.implicitWidth - parent.spacing * 2
+                  anchors.verticalCenter: parent.verticalCenter
+                  spacing: Style.space(2)
+
+                  Text {
+                    width: parent.width
+                    text: root.profileStatusTitle
+                    color: root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                    font.bold: true
+                    elide: Text.ElideRight
+                  }
+
+                  Text {
+                    width: parent.width
+                    text: root.profileStatusSubtitle
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.bodySmall
+                    elide: Text.ElideRight
+                  }
+                }
+
+                Text {
+                  id: profileAutoLabel
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: root.activeProfile !== "" && root.activeProfile === root.recommendedProfile ? "AUTO" : "LIVE"
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                }
+              }
             }
 
-            Repeater {
-              model: root.profiles
+            PanelSectionHeader {
+              text: "LAYOUT"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
 
-              ProfileRow {
-                required property var modelData
-                required property int index
-                width: parent.width
-                rowIndex: index
-                profile: modelData
-                onActivated: root.applyProfile(modelData.name, false)
+            CursorSurface {
+              width: parent.width
+              implicitHeight: Style.space(150)
+              bordered: true
+              foreground: root.foreground
+
+              Item {
+                id: layoutCanvas
+                anchors.fill: parent
+                anchors.margins: Style.space(12)
+
+                Repeater {
+                  model: root.liveScreens
+
+                  Rectangle {
+                    required property var modelData
+                    readonly property var previewRect: Model.layoutRect(
+                      modelData,
+                      root.layoutBounds,
+                      layoutCanvas.width,
+                      layoutCanvas.height,
+                      0
+                    )
+
+                    x: previewRect.x
+                    y: previewRect.y
+                    width: previewRect.width
+                    height: previewRect.height
+                    radius: Math.min(Style.cornerRadius, 5)
+                    color: Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.10)
+                    border.width: 1
+                    border.color: root.foreground
+
+                    Text {
+                      anchors.centerIn: parent
+                      width: Math.max(0, parent.width - Style.space(8))
+                      text: String(parent.modelData.name || "Display")
+                      color: root.foreground
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                      font.bold: true
+                      horizontalAlignment: Text.AlignHCenter
+                      elide: Text.ElideRight
+                    }
+                  }
+                }
+
+                Text {
+                  visible: root.liveScreens.length === 0
+                  anchors.centerIn: parent
+                  text: "Waiting for displays…"
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.body
+                }
               }
             }
 
@@ -577,10 +699,51 @@ Panel {
 
             ActionRow {
               width: parent.width
-              rowIndex: root.profiles.length
+              rowIndex: 0
+              icon: root.profilesExpanded ? "󰅀" : "󰅂"
+              title: root.profilesExpanded ? "Hide profiles" : "Switch profile"
+              subtitle: root.profiles.length + " saved · automatic switching stays on"
+              onActivated: {
+                root.profilesExpanded = !root.profilesExpanded
+                root.cursorIndex = 0
+              }
+            }
+
+            Column {
+              visible: root.profilesExpanded
+              width: parent.width
+              spacing: Style.space(6)
+
+              Text {
+                visible: root.profiles.length === 0
+                width: parent.width
+                text: "No saved profiles yet. Open the layout editor to create one."
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                wrapMode: Text.WordWrap
+              }
+
+              Repeater {
+                model: root.profiles
+
+                ProfileRow {
+                  required property var modelData
+                  required property int index
+                  width: parent.width
+                  rowIndex: index + 1
+                  profile: modelData
+                  onActivated: root.applyProfile(modelData.name, false)
+                }
+              }
+            }
+
+            ActionRow {
+              width: parent.width
+              rowIndex: root.profilesExpanded ? root.profiles.length + 1 : 1
               icon: "󰆍"
               title: "Open layout editor"
-              subtitle: "Arrange displays and manage profiles"
+              subtitle: "Arrange displays, save profiles, and set workspaces"
               onActivated: root.launchTui()
             }
           }

@@ -23,6 +23,7 @@ BarWidget {
   readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
   readonly property bool backendConnected: panelLoader.item ? panelLoader.item.backendConnected === true : false
   readonly property int monitorCount: panelLoader.item ? panelLoader.item.monitorCount : Quickshell.screens.length
+  readonly property string activeProfile: panelLoader.item ? panelLoader.item.activeProfile : ""
 
   function open() {
     if (panelLoader.item && panelLoader.item.openFromHotkey) panelLoader.item.openFromHotkey()
@@ -59,7 +60,7 @@ BarWidget {
     anchors.fill: parent
     bar: root.bar
     slotSize: Style.bar.statusSlot
-    tooltipText: "hyprmoncfg"
+    tooltipText: root.activeProfile !== "" ? "Display · " + root.activeProfile : "Display · hyprmoncfg"
     iconComponent: Component {
       Item {
         Text {
@@ -71,26 +72,13 @@ BarWidget {
         }
 
         Rectangle {
-          width: Math.max(9, Style.space(10))
+          visible: root.backendConnected
+          width: Math.max(3, Style.space(3))
           height: width
           radius: width / 2
-          anchors.top: parent.top
-          anchors.right: parent.right
-          anchors.topMargin: -1
-          anchors.rightMargin: -1
-          color: root.backendConnected ? Color.accent : Color.background
-          border.width: 1
-          border.color: root.backendConnected ? Color.accent : button.foreground
-
-          Text {
-            anchors.centerIn: parent
-            anchors.verticalCenterOffset: -0.5
-            text: "H"
-            color: root.backendConnected ? Color.background : button.foreground
-            font.family: button.fontFamily
-            font.pixelSize: Math.max(7, parent.height * 0.68)
-            font.bold: true
-          }
+          anchors.centerIn: parent
+          anchors.verticalCenterOffset: -1
+          color: Color.accent
         }
       }
     }
