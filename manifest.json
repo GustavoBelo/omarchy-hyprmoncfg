@@ -14,14 +14,14 @@
   },
   "barWidget": {
     "displayName": "hyprmoncfg",
-    "description": "Switch monitor profiles and see the active layout.",
+    "description": "Automatic monitor profiles on hotplug and lid events.",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "right"
   },
   "hyprmoncfg": {
     "package": "hyprmoncfg",
-    "minimumVersion": "1.11.0",
+    "minimumVersion": "1.12.0",
     "protocolVersion": 1
   }
 }

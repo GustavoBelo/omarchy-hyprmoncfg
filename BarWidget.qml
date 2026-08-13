@@ -59,26 +59,31 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    slotSize: Style.bar.statusSlot
+    text: root.monitorCount > 1 ? "󰍺" : "󰍹"
+    dimmed: !root.backendConnected
     tooltipText: root.activeProfile !== "" ? "Display · " + root.activeProfile : "Display · hyprmoncfg"
     iconComponent: Component {
       Item {
-        Text {
-          anchors.centerIn: parent
-          text: root.monitorCount > 1 ? "󰍺" : "󰍹"
-          color: root.backendConnected ? button.foreground : Qt.darker(button.foreground, 1.55)
-          font.family: button.fontFamily
-          font.pixelSize: button.fontSize
+        OpticalGlyph {
+          id: barDisplayGlyph
+          anchors.fill: parent
+          text: button.text
+          color: button.foreground
+          fontFamily: button.fontFamily
+          fontSize: button.fontSize
         }
 
-        Rectangle {
+        Text {
           visible: root.backendConnected
-          width: Math.max(3, Style.space(3))
-          height: width
-          radius: width / 2
-          anchors.centerIn: parent
-          anchors.verticalCenterOffset: -1
+          anchors.right: barDisplayGlyph.right
+          anchors.bottom: barDisplayGlyph.bottom
+          anchors.rightMargin: -Style.space(1)
+          anchors.bottomMargin: -Style.space(1)
+          text: "󰄬"
           color: Color.accent
+          font.family: button.fontFamily
+          font.pixelSize: Math.max(7, Math.round(button.fontSize * 0.45))
+          font.bold: true
         }
       }
     }
