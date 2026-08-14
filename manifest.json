@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "id": "crmne.hyprmoncfg",
-  "name": "hyprmoncfg: Monitor Manager for Omarchy",
+  "name": "hyprmoncfg: Multi-Monitor Manager for Omarchy",
   "version": "1.1.2",
   "author": "Carmine Paolino",
   "license": "MIT",
-  "description": "Create multi-monitor layouts and switch them automatically on hotplug and lid events.",
+  "description": "Create monitor layouts in a visual editor and switch them automatically on hotplug and lid events.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "hyprmoncfg",
-    "description": "Create multi-monitor layouts and switch them automatically on hotplug and lid events.",
+    "description": "Create monitor layouts in a visual editor and switch them automatically on hotplug and lid events.",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "right"
