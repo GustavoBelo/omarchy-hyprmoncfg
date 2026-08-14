@@ -1,4 +1,4 @@
-# hyprmoncfg — Spatial Layout Editor for Hyprland Monitors
+# hyprmoncfg: Monitor Manager for Omarchy
 
 An Omarchy bar panel for [hyprmoncfg](https://hyprmoncfg.dev/). See the live display layout and active profile. Turn management on for automatic switching on monitor hotplug and lid events, or turn it off to hand displays cleanly back to Omarchy.
 
