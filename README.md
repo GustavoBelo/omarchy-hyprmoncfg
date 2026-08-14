@@ -1,6 +1,6 @@
 # hyprmoncfg: Multi-Monitor Manager for Omarchy
 
-An Omarchy bar panel for [hyprmoncfg](https://hyprmoncfg.dev/). Create Hyprland monitor layouts in a visual editor and switch them automatically on hotplug and lid events. See the live display layout and active profile in the bar, or hand display management cleanly back to Omarchy.
+An Omarchy bar panel for [hyprmoncfg](https://hyprmoncfg.dev/). Create multi-monitor layouts for Hyprland in a visual editor and switch them automatically on hotplug and lid events. See the live display layout and active profile in the bar, or hand display management cleanly back to Omarchy.
 
 ![hyprmoncfg for Omarchy](preview.png)
 
