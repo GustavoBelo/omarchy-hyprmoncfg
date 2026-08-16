@@ -19,6 +19,7 @@ Panel {
   property bool installed: false
   property bool compatible: false
   property bool checkingInstallation: true
+  property bool installationStateKnown: false
   property bool installing: false
   property bool serviceEnabled: false
   property bool serviceActive: false
@@ -29,6 +30,7 @@ Panel {
   property bool connectionGrace: false
   property bool backendConnected: backendSocket.connected
   property var document: ({ profiles: [], monitors: [], daemon: { running: false } })
+  property bool documentReady: false
   property string lastError: ""
   property int requestSequence: 0
   property var pendingMethods: ({})
@@ -53,12 +55,13 @@ Panel {
   readonly property string displayedProfile: activeProfile !== "" ? activeProfile : recommendedProfile
   readonly property string profileStatusTitle: {
     if (!root.managedChecked) return "Not managed by hyprmoncfg"
+    if (!root.documentReady) return root.serviceActionPending ? "Starting hyprmoncfg…" : "Loading profile…"
     if (displayedProfile !== "") return displayedProfile
-    if (root.serviceActionPending) return "Starting hyprmoncfg…"
     return "Custom layout"
   }
   readonly property string profileStatusSubtitle: {
     if (!root.managedChecked) return "Turn on management for automatic profiles"
+    if (!root.documentReady) return "Reading the active display layout"
     var displays = monitorCount === 1 ? "1 display" : monitorCount + " displays"
     if (activeProfile !== "") return displays + " · Automatic switching"
     if (recommendedProfile !== "") return displays + " · Switching automatically"
@@ -72,8 +75,15 @@ Panel {
     && !backendConnected
     && !connectionGrace
     && !serviceActionPending
-  readonly property string socketPath: String(Quickshell.env("XDG_RUNTIME_DIR") || "") + "/hyprmoncfgd.sock"
-  readonly property string installFailurePath: String(Quickshell.env("XDG_RUNTIME_DIR") || "") + "/hyprmoncfg-panel-install.failed"
+  readonly property string runtimeDir: String(Quickshell.env("XDG_RUNTIME_DIR") || "")
+  readonly property string socketPath: root.runtimeDir + "/hyprmoncfgd.sock"
+  readonly property string installFailurePath: root.runtimeDir + "/hyprmoncfg-panel-install.failed"
+  readonly property string installCompletePath: root.runtimeDir + "/hyprmoncfg-panel-install.complete"
+  readonly property bool barIconDimmed: root.installationStateKnown
+    && root.compatible
+    && root.serviceStateKnown
+    && !root.managedChecked
+    && !root.serviceActionPending
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color dim: Qt.darker(foreground, 1.5)
   readonly property color urgent: bar ? bar.urgent : Color.urgent
@@ -103,13 +113,15 @@ Panel {
 
   function checkInstallation() {
     if (whichProcess.running) return
-    root.checkingInstallation = true
+    if (!root.installationStateKnown) root.checkingInstallation = true
     whichProcess.command = [
       "sh",
       "-c",
-      "if command -v hyprmoncfg >/dev/null 2>&1; then hyprmoncfg version; elif test -f \"$1\"; then cat \"$1\"; exit 2; else exit 1; fi",
+      "if test \"$3\" = \"1\"; then if test -f \"$1\"; then cat \"$1\"; exit 2; elif ! test -f \"$2\"; then exit 3; fi; fi; if command -v hyprmoncfg >/dev/null 2>&1; then hyprmoncfg version; else exit 1; fi",
       "sh",
-      root.installFailurePath
+      root.installFailurePath,
+      root.installCompletePath,
+      root.installing ? "1" : "0"
     ]
     whichProcess.running = true
   }
@@ -121,12 +133,14 @@ Panel {
   }
 
   function install() {
+    if (root.runtimeDir === "") {
+      root.lastError = "Could not find the user runtime directory."
+      return
+    }
     root.installing = true
     root.lastError = ""
-    installerProcess.command = Model.installProcessArgs()
-    installerProcess.startDetached()
-    installPoll.restart()
-    installTimeout.restart()
+    installPreparationProcess.command = ["rm", "-f", root.installFailurePath, root.installCompletePath]
+    installPreparationProcess.running = true
   }
 
   function setManaged(enabled) {
@@ -185,6 +199,7 @@ Panel {
   function updateDocument(value) {
     if (!value || typeof value !== "object") return
     root.document = value
+    root.documentReady = true
   }
 
   function handleMessage(line) {
@@ -268,20 +283,38 @@ Panel {
     id: whichProcess
     stdout: StdioCollector { id: versionOutput; waitForEnd: true }
     onExited: function(exitCode) {
+      if (exitCode === 3 && root.installing) return
+
       root.checkingInstallation = false
-      root.installed = exitCode === 0
-      root.compatible = root.installed && Model.versionAtLeast(versionOutput.text, "1.12.0")
-      if (root.compatible) {
-        root.installing = false
-        installTimeout.stop()
-        root.checkServiceState()
-      } else if (exitCode === 2 && root.installing) {
+      root.installationStateKnown = true
+      var probedInstalled = exitCode === 0
+      var probedCompatible = probedInstalled && Model.versionAtLeast(versionOutput.text, "1.12.0")
+
+      if (root.installing && exitCode === 2) {
         root.installing = false
         installPoll.stop()
         installTimeout.stop()
         root.lastError = String(versionOutput.text || "").trim() === "130"
           ? "Installation was canceled."
           : "Installation did not finish. Check the Omarchy terminal and try again."
+        return
+      }
+
+      if (root.installing && !probedCompatible) {
+        root.installing = false
+        installPoll.stop()
+        installTimeout.stop()
+        root.lastError = "The update finished, but hyprmoncfg 1.12.0 or newer is still required."
+        return
+      }
+
+      root.installed = probedInstalled
+      root.compatible = probedCompatible
+      if (root.compatible) {
+        root.installing = false
+        installPoll.stop()
+        installTimeout.stop()
+        root.checkServiceState()
       } else {
         backendSocket.connected = false
         root.serviceStateKnown = false
@@ -328,6 +361,22 @@ Panel {
           serviceRefreshTimer.restart()
         }
       }
+    }
+  }
+
+  Process {
+    id: installPreparationProcess
+    onExited: function(exitCode) {
+      if (!root.installing) return
+      if (exitCode !== 0) {
+        root.installing = false
+        root.lastError = "Could not prepare the hyprmoncfg update."
+        return
+      }
+      installerProcess.command = Model.installProcessArgs()
+      installerProcess.startDetached()
+      installPoll.restart()
+      installTimeout.restart()
     }
   }
 
@@ -541,13 +590,14 @@ Panel {
               Text {
                 id: welcomeDisplayGlyph
                 anchors.centerIn: parent
-                text: root.monitorCount > 1 ? "󰍺" : "󰍹"
+                text: root.installed ? "\uf021" : (root.monitorCount > 1 ? "󰍺" : "󰍹")
                 color: root.foreground
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.display + Style.space(12)
               }
 
               Text {
+                visible: !root.installed
                 anchors.right: welcomeDisplayGlyph.right
                 anchors.bottom: welcomeDisplayGlyph.bottom
                 anchors.rightMargin: -Style.space(3)
@@ -605,7 +655,7 @@ Panel {
               text: root.installing
                 ? (root.installed ? "Updating hyprmoncfg…" : "Installing hyprmoncfg…")
                 : (root.installed ? "Update hyprmoncfg" : "Install hyprmoncfg")
-              iconText: root.installing ? "󰦖" : "󰏔"
+              iconText: root.installed ? "\uf021" : (root.installing ? "󰦖" : "󰏔")
               iconSpinning: root.installing
               fontFamily: root.fontFamily
               fontSize: Style.font.body
@@ -614,7 +664,7 @@ Panel {
               accent: Color.accent
               verticalPadding: Style.space(14)
               bordered: true
-              selected: true
+              selected: !root.installed
               hasCursor: root.cursorActive && root.cursorIndex === 0
               enabled: !root.installing
               onHovered: function(hovered) {

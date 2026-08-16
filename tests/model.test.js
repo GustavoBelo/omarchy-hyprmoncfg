@@ -4,7 +4,7 @@ const fs = require("node:fs")
 const path = require("node:path")
 const Model = require("../Model.js")
 
-test("installation uses Omarchy's presented AUR flow and opens a centered TUI", () => {
+test("installation uses Omarchy's presented AUR flow, restarts the daemon, and opens a centered TUI", () => {
   assert.deepEqual(Model.installProcessArgs(), [
     "omarchy",
     "launch",
@@ -12,17 +12,29 @@ test("installation uses Omarchy's presented AUR flow and opens a centered TUI", 
     "terminal",
     "with",
     "presentation",
-    "rm -f \"$XDG_RUNTIME_DIR/hyprmoncfg-panel-install.failed\"; status=0; omarchy pkg aur add hyprmoncfg && systemctl --user enable --now hyprmoncfgd.service && setsid -f gtk-launch hyprmoncfg-omarchy >/dev/null 2>&1 || status=$?; if (( status != 0 )); then printf '%s\\n' \"$status\" > \"$XDG_RUNTIME_DIR/hyprmoncfg-panel-install.failed\"; fi; (exit \"$status\")"
+    "rm -f \"$XDG_RUNTIME_DIR/hyprmoncfg-panel-install.failed\" \"$XDG_RUNTIME_DIR/hyprmoncfg-panel-install.complete\"; status=0; omarchy pkg aur add hyprmoncfg && systemctl --user enable hyprmoncfgd.service && systemctl --user restart hyprmoncfgd.service && setsid -f gtk-launch hyprmoncfg-omarchy >/dev/null 2>&1 || status=$?; if (( status == 0 )); then : > \"$XDG_RUNTIME_DIR/hyprmoncfg-panel-install.complete\"; else printf '%s\\n' \"$status\" > \"$XDG_RUNTIME_DIR/hyprmoncfg-panel-install.failed\"; fi; (exit \"$status\")"
   ])
 })
 
-test("installation failure is observable and cannot leave the panel spinning forever", () => {
+test("installation completion and failure are observable and cannot leave the panel spinning forever", () => {
   const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
   assert.match(qml, /hyprmoncfg-panel-install\.failed/)
-  assert.match(qml, /exitCode === 2 && root\.installing/)
+  assert.match(qml, /hyprmoncfg-panel-install\.complete/)
+  assert.match(qml, /id: installPreparationProcess/)
+  assert.match(qml, /root\.installing && exitCode === 2/)
+  assert.match(qml, /exitCode === 3 && root\.installing/)
   assert.match(qml, /id: installTimeout/)
   assert.match(qml, /interval: 300000/)
   assert.doesNotMatch(Model.installCommand(), /&\s*$/)
+})
+
+test("background installation probes keep the resolved update screen stable", () => {
+  const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
+  assert.match(qml, /property bool installationStateKnown: false/)
+  assert.match(qml, /if \(!root\.installationStateKnown\) root\.checkingInstallation = true/)
+  assert.match(qml, /if \(exitCode === 3 && root\.installing\) return/)
+  assert.match(qml, /root\.installed = probedInstalled/)
+  assert.ok(qml.indexOf("root.installed = probedInstalled") > qml.indexOf("if (root.installing && !probedCompatible)"))
 })
 
 test("missing hyprmoncfg gets a focused onboarding screen", () => {
@@ -31,7 +43,7 @@ test("missing hyprmoncfg gets a focused onboarding screen", () => {
   assert.match(qml, /hyprmoncfg switches them on hotplug and lid events\./)
   assert.match(qml, /This panel puts the live layout, active profile, and automatic switching right here in Omarchy\./)
   assert.match(qml, /visible: root\.compatible \|\| root\.checkingInstallation/)
-  assert.match(qml, /selected: true/)
+  assert.match(qml, /selected: !root\.installed/)
 })
 
 test("the layout editor delegates window behavior to the packaged desktop launcher", () => {
@@ -96,16 +108,25 @@ test("layout preview preserves relative placement", () => {
   assert.equal(right.y, 50)
 })
 
-test("bar icon matches the panel's monitor and accent-check language", () => {
+test("bar icon stays legible through transient daemon restarts", () => {
   const qml = fs.readFileSync(path.join(__dirname, "..", "BarWidget.qml"), "utf8")
   assert.doesNotMatch(qml, /text: "H"/)
   assert.doesNotMatch(qml, /slotSize: Style\.bar\.statusSlot/)
   assert.match(qml, /text: root\.monitorCount > 1 \? "󰍺" : "󰍹"/)
-  assert.match(qml, /dimmed: !root\.backendConnected/)
+  assert.match(qml, /dimmed: root\.barIconDimmed/)
+  assert.doesNotMatch(qml, /dimmed: !root\.backendConnected/)
   assert.match(qml, /id: barDisplayGlyph/)
   assert.match(qml, /visible: root\.backendConnected/)
   assert.match(qml, /text: "󰄬"/)
   assert.match(qml, /color: Color\.accent/)
+})
+
+test("the update call to action uses a plain refresh icon", () => {
+  const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
+  assert.match(qml, /text: root\.installed \? "\\uf021"/)
+  assert.match(qml, /iconText: root\.installed \? "\\uf021"/)
+  assert.match(qml, /visible: !root\.installed/)
+  assert.match(qml, /selected: !root\.installed/)
 })
 
 test("the panel header uses the clear managed check at hero scale", () => {
@@ -180,6 +201,13 @@ test("the active profile falls back to the daemon recommendation while switching
   assert.match(qml, /displayedProfile: activeProfile !== "" \? activeProfile : recommendedProfile/)
   assert.match(qml, /if \(displayedProfile !== ""\) return displayedProfile/)
   assert.match(qml, /Switching automatically/)
+})
+
+test("the panel waits for daemon status before calling a layout custom", () => {
+  const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
+  assert.match(qml, /property bool documentReady: false/)
+  assert.match(qml, /if \(!root\.documentReady\) return root\.serviceActionPending \? "Starting hyprmoncfg…" : "Loading profile…"/)
+  assert.match(qml, /root\.documentReady = true/)
 })
 
 test("an enabled service without IPC is a recoverable failure", () => {

@@ -22,6 +22,7 @@ BarWidget {
 
   readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
   readonly property bool backendConnected: panelLoader.item ? panelLoader.item.backendConnected === true : false
+  readonly property bool barIconDimmed: panelLoader.item ? panelLoader.item.barIconDimmed === true : false
   readonly property int monitorCount: panelLoader.item ? panelLoader.item.monitorCount : Quickshell.screens.length
   readonly property string activeProfile: panelLoader.item ? panelLoader.item.activeProfile : ""
 
@@ -60,7 +61,7 @@ BarWidget {
     anchors.fill: parent
     bar: root.bar
     text: root.monitorCount > 1 ? "󰍺" : "󰍹"
-    dimmed: !root.backendConnected
+    dimmed: root.barIconDimmed
     tooltipText: root.activeProfile !== "" ? "Display · " + root.activeProfile : "Display · hyprmoncfg"
     iconComponent: Component {
       Item {
