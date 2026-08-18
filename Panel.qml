@@ -76,6 +76,8 @@ Panel {
   readonly property bool managedChecked: serviceActionPending
     ? serviceTargetManaged
     : (serviceEnabled || serviceActive || backendConnected)
+  readonly property string runningVersion: Model.releaseVersion(root.document ? root.document.version : "")
+  readonly property string installedRelease: Model.releaseVersion(root.installedVersion)
   readonly property bool daemonOutdated: root.backendConnected
     && root.documentReady
     && Model.daemonNeedsRestart(root.installedVersion, root.document ? root.document.version : "")
@@ -94,8 +96,8 @@ Panel {
       rows.push({
         id: "restart-service",
         icon: "󰑓",
-        title: "Restart to finish updating",
-        subtitle: "hyprmoncfg was updated, but the previous version is still running"
+        title: "Restart daemon",
+        subtitle: "Running " + root.runningVersion + ", installed " + root.installedRelease
       })
     if (root.pluginUpdateAvailable)
       rows.push({
@@ -103,8 +105,8 @@ Panel {
         icon: "󰚰",
         title: root.pluginUpdating ? "Updating this panel…" : "Update this panel",
         subtitle: root.pluginUpdating
-          ? "Omarchy is pulling the new version"
-          : "A newer version of the hyprmoncfg panel is available"
+          ? "Pulling the new version"
+          : "A newer version is available"
       })
     return rows
   }

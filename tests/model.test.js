@@ -250,7 +250,14 @@ test("an upgraded package whose daemon is still the old binary offers a restart"
 
   const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
   assert.match(qml, /readonly property bool daemonOutdated:/)
-  assert.match(qml, /Restart to finish updating/)
+  assert.match(qml, /title: "Restart daemon"/)
+  // Every subtitle has to fit the row: this panel elides, and a cut sentence
+  // reads as a bug.
+  const subtitles = qml.match(/subtitle: "[^"]+"/g) || []
+  for (const subtitle of subtitles) {
+    const text = subtitle.slice("subtitle: \"".length, -1)
+    assert.ok(text.length <= 40, `subtitle too long to fit the row: ${text}`)
+  }
   assert.match(qml, /else if \(root\.daemonOutdated\)/)
 })
 
