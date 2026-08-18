@@ -186,6 +186,20 @@ function pluginUpdateCheckCommand(pluginId, throttleHours) {
   ]
 }
 
+// Omarchy's rescanPlugins discovers plugins but does not re-execute the QML of
+// one already loaded, so a plugin that updates itself keeps showing its old
+// code until the shell restarts. setsid takes the restart out of the shell's
+// own process group, so killing the shell cannot kill the command relaunching it.
+function shellRestartCommand() {
+  return ["sh", "-c", "setsid -f omarchy-restart-shell >/dev/null 2>&1"]
+}
+
+// pluginUpdated reports whether `omarchy plugin update` actually pulled
+// something, so an already-current plugin does not restart the shell for nothing.
+function pluginUpdated(output) {
+  return /^Updated /m.test(String(output || ""))
+}
+
 function pluginUpdateCommand(pluginId) {
   return ["omarchy", "plugin", "update", String(pluginId || ""), "--yes"]
 }
@@ -238,6 +252,8 @@ if (typeof module !== "undefined") {
     layoutRect: layoutRect,
     pluginUpdateCheckCommand: pluginUpdateCheckCommand,
     pluginUpdateCommand: pluginUpdateCommand,
+    shellRestartCommand: shellRestartCommand,
+    pluginUpdated: pluginUpdated,
     releaseVersion: releaseVersion,
     daemonNeedsRestart: daemonNeedsRestart,
     versionAtLeast: versionAtLeast

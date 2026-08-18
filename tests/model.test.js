@@ -295,3 +295,22 @@ test("action rows keep their cursor positions in step with what is on screen", (
   assert.doesNotMatch(qml, /serviceBroken \? 2 : 1/)
   assert.doesNotMatch(qml, /serviceBroken \? 3 : 2/)
 })
+
+test("updating the panel finishes the job by reloading the shell", () => {
+  // rescanPlugins does not re-execute the QML of a plugin already loaded, so
+  // an update that stops at the files leaves the old panel on screen.
+  assert.deepEqual(Model.shellRestartCommand(), [
+    "sh", "-c", "setsid -f omarchy-restart-shell >/dev/null 2>&1"
+  ])
+  // setsid matters: the restart must outlive the shell it is about to kill.
+  assert.match(Model.shellRestartCommand()[2], /setsid/)
+
+  // Only a real update is worth a restart.
+  assert.equal(Model.pluginUpdated("Updated crmne.hyprmoncfg."), true)
+  assert.equal(Model.pluginUpdated("crmne.hyprmoncfg is up to date."), false)
+  assert.equal(Model.pluginUpdated(""), false)
+
+  const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
+  assert.match(qml, /if \(Model\.pluginUpdated\(pluginUpdateOutput\.text\)\)/)
+  assert.match(qml, /shellRestartProcess\.startDetached\(\)/)
+})

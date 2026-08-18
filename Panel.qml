@@ -320,14 +320,26 @@ Panel {
 
   Process {
     id: pluginUpdateRunProcess
+    stdout: StdioCollector { id: pluginUpdateOutput; waitForEnd: true }
     onExited: function(exitCode) {
       root.pluginUpdating = false
-      if (exitCode === 0) {
-        root.pluginUpdateAvailable = false
+      if (exitCode !== 0) {
+        root.lastError = "The panel update did not finish. Run `omarchy plugin update " + root.moduleName + "` to see why."
         return
       }
-      root.lastError = "The panel update did not finish. Run `omarchy plugin update " + root.moduleName + "` to see why."
+
+      root.pluginUpdateAvailable = false
+      // The files on disk are new, but this panel is still the old code until
+      // the shell reloads it, so finish the job rather than look unchanged.
+      if (Model.pluginUpdated(pluginUpdateOutput.text)) {
+        shellRestartProcess.command = Model.shellRestartCommand()
+        shellRestartProcess.startDetached()
+      }
     }
+  }
+
+  Process {
+    id: shellRestartProcess
   }
 
   Component.onCompleted: root.checkInstallation()
