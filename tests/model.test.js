@@ -314,3 +314,14 @@ test("updating the panel finishes the job by reloading the shell", () => {
   assert.match(qml, /if \(Model\.pluginUpdated\(pluginUpdateOutput\.text\)\)/)
   assert.match(qml, /shellRestartProcess\.startDetached\(\)/)
 })
+
+test("updating touches only this plugin, and asks nothing", () => {
+  const command = Model.pluginUpdateCommand("crmne.hyprmoncfg")
+
+  // Naming the plugin is what keeps omarchy-plugin-update from walking every
+  // installed plugin: without an id it updates all of them.
+  assert.ok(command.includes("crmne.hyprmoncfg"), "the plugin id must be passed")
+  // --yes skips the diff and the gum confirm, which a panel has no terminal to
+  // answer anyway.
+  assert.ok(command.includes("--yes"), "the update must not wait on a prompt")
+})
