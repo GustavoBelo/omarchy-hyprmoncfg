@@ -43,6 +43,9 @@ Panel {
     Quickshell.screens || []
   )
   readonly property var layoutBounds: Model.layoutBounds(layoutDisplays)
+  readonly property string hiddenDisplays: Model.hiddenDisplays(
+    root.backendConnected ? monitorSummaries : []
+  )
   readonly property int monitorCount: {
     return layoutDisplays.length
   }
@@ -63,8 +66,8 @@ Panel {
     if (!root.managedChecked) return "Turn on management for automatic profiles"
     if (!root.documentReady) return "Reading the active display layout"
     var displays = monitorCount === 1 ? "1 display" : monitorCount + " displays"
-    if (activeProfile !== "") return displays + " · Automatic switching"
-    if (recommendedProfile !== "") return displays + " · Switching automatically"
+    if (activeProfile !== "") return displays + " · Active"
+    if (recommendedProfile !== "") return displays + " · Best match, not active"
     return displays + " · No matching profile"
   }
   readonly property bool managedChecked: serviceActionPending
@@ -757,10 +760,26 @@ Panel {
                   hasCursor: root.cursorActive && root.cursorIndex === (root.serviceBroken ? 2 : 1)
                   foreground: root.foreground
 
+                  Text {
+                    id: hiddenDisplaysLabel
+                    visible: root.hiddenDisplays !== ""
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: Style.space(12)
+                    text: root.hiddenDisplays
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    elide: Text.ElideRight
+                  }
+
                   Item {
                     id: layoutCanvas
                     anchors.fill: parent
                     anchors.margins: Style.space(12)
+                    anchors.topMargin: Style.space(12)
+                      + (hiddenDisplaysLabel.visible ? hiddenDisplaysLabel.height + Style.space(4) : 0)
 
                     Repeater {
                       model: root.layoutDisplays

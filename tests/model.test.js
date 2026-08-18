@@ -196,11 +196,30 @@ test("the profile explains the unmanaged state", () => {
   assert.match(qml, /if \(!root\.managedChecked\) return "Turn on management for automatic profiles"/)
 })
 
-test("the active profile falls back to the daemon recommendation while switching", () => {
+test("the active profile falls back to the daemon recommendation while switching, and says so", () => {
   const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
   assert.match(qml, /displayedProfile: activeProfile !== "" \? activeProfile : recommendedProfile/)
   assert.match(qml, /if \(displayedProfile !== ""\) return displayedProfile/)
-  assert.match(qml, /Switching automatically/)
+  // A recommendation must never read like a profile that is already applied.
+  assert.match(qml, /if \(activeProfile !== ""\) return displays \+ " · Active"/)
+  assert.match(qml, /if \(recommendedProfile !== ""\) return displays \+ " · Best match, not active"/)
+})
+
+test("the layout draws only displays that own their image and names the rest", () => {
+  const monitors = [
+    { name: "DP-1", enabled: true, x: 0, y: 0, logical_width: 2880, logical_height: 1620 },
+    { name: "HDMI-A-1", enabled: true, mirror_of: "DP-1", x: 0, y: 0, logical_width: 2560, logical_height: 1440 },
+    { name: "eDP-1", enabled: false, x: 0, y: 1620, logical_width: 1920, logical_height: 1200 }
+  ]
+
+  const displays = Model.layoutDisplays(monitors, [{ name: "fallback" }])
+  assert.deepEqual(displays.map(function(display) { return display.name }), ["DP-1"])
+  assert.equal(Model.hiddenDisplays(monitors), "Off: eDP-1   Mirrored: HDMI-A-1 → DP-1")
+  assert.equal(Model.hiddenDisplays([monitors[0]]), "")
+
+  const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
+  assert.match(qml, /id: hiddenDisplaysLabel/)
+  assert.match(qml, /visible: root\.hiddenDisplays !== ""/)
 })
 
 test("the panel waits for daemon status before calling a layout custom", () => {

@@ -26,13 +26,47 @@ function parseEnvelope(raw) {
   }
 }
 
+function mirrorTarget(monitor) {
+  return String((monitor || {}).mirror_of || "").trim()
+}
+
+// A monitor only earns a rectangle when it drives its own image. One that is
+// off has no place on the canvas, and one that mirrors another shares its
+// source's position, so drawing it would stack two cards on the same spot.
+function drawsOwnImage(monitor) {
+  return !!monitor
+    && monitor.enabled !== false
+    && mirrorTarget(monitor) === ""
+    && Number(monitor.logical_width || 0) > 0
+    && Number(monitor.logical_height || 0) > 0
+}
+
+// hiddenDisplays names what the canvas leaves out, so a display never vanishes
+// without a trace. Mirrors: the TUI canvas strip.
+function hiddenDisplays(monitors) {
+  var summaries = monitors instanceof Array ? monitors : []
+  var off = []
+  var mirrored = []
+
+  for (var i = 0; i < summaries.length; i++) {
+    var monitor = summaries[i] || {}
+    var name = String(monitor.name || "Display")
+    if (monitor.enabled === false) {
+      off.push(name)
+    } else if (mirrorTarget(monitor) !== "") {
+      mirrored.push(name + " → " + mirrorTarget(monitor))
+    }
+  }
+
+  var parts = []
+  if (off.length > 0) parts.push("Off: " + off.join(", "))
+  if (mirrored.length > 0) parts.push("Mirrored: " + mirrored.join(", "))
+  return parts.join("   ")
+}
+
 function layoutDisplays(monitors, screens) {
   var summaries = monitors instanceof Array ? monitors : []
-  var enriched = summaries.filter(function(monitor) {
-    return monitor && monitor.enabled !== false
-      && Number(monitor.logical_width || 0) > 0
-      && Number(monitor.logical_height || 0) > 0
-  }).map(function(monitor) {
+  var enriched = summaries.filter(drawsOwnImage).map(function(monitor) {
     return {
       name: String(monitor.name || "Display"),
       description: String(monitor.description || ""),
@@ -149,6 +183,7 @@ if (typeof module !== "undefined") {
     installCommand: installCommand,
     installProcessArgs: installProcessArgs,
     parseEnvelope: parseEnvelope,
+    hiddenDisplays: hiddenDisplays,
     layoutDisplays: layoutDisplays,
     displayModelLabel: displayModelLabel,
     displayDetailLabel: displayDetailLabel,
