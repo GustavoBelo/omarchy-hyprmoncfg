@@ -159,6 +159,37 @@ function layoutRect(display, bounds, canvasWidth, canvasHeight, padding) {
   }
 }
 
+// Omarchy installs plugins as git checkouts under ~/.config/omarchy/plugins and
+// never updates them on its own, so the panel has to notice for itself. The
+// check mirrors `omarchy plugin update`: fetch, then compare HEAD to FETCH_HEAD.
+// Fetching is throttled, because opening a panel is not a reason to talk to a
+// remote every time. Exit 10 means an update is waiting; anything else means
+// there is nothing to say.
+function pluginUpdateCheckCommand(pluginId, throttleHours) {
+  var hours = Number(throttleHours || 6)
+  return [
+    "sh",
+    "-c",
+    'set -e; ' +
+      'dir="$HOME/.config/omarchy/plugins/$1"; ' +
+      'stamp="${XDG_RUNTIME_DIR:-/tmp}/$1.update-check"; ' +
+      '[ -d "$dir/.git" ] || exit 3; ' +
+      'if [ -z "$(find "$stamp" -newermt "-$2 hours" 2>/dev/null)" ]; then ' +
+      'git -C "$dir" fetch --quiet origin HEAD 2>/dev/null || exit 4; ' +
+      ': > "$stamp"; fi; ' +
+      'head=$(git -C "$dir" rev-parse HEAD 2>/dev/null) || exit 5; ' +
+      'remote=$(git -C "$dir" rev-parse FETCH_HEAD 2>/dev/null) || exit 5; ' +
+      '[ "$head" = "$remote" ] || exit 10',
+    "sh",
+    String(pluginId || ""),
+    String(hours)
+  ]
+}
+
+function pluginUpdateCommand(pluginId) {
+  return ["omarchy", "plugin", "update", String(pluginId || ""), "--yes"]
+}
+
 // releaseVersion pulls the plain version out of `hyprmoncfg version` output,
 // which also carries a commit and a build date.
 function releaseVersion(output) {
@@ -205,6 +236,8 @@ if (typeof module !== "undefined") {
     displayDetailLabel: displayDetailLabel,
     layoutBounds: layoutBounds,
     layoutRect: layoutRect,
+    pluginUpdateCheckCommand: pluginUpdateCheckCommand,
+    pluginUpdateCommand: pluginUpdateCommand,
     releaseVersion: releaseVersion,
     daemonNeedsRestart: daemonNeedsRestart,
     versionAtLeast: versionAtLeast

@@ -18,6 +18,8 @@ Panel {
 
   property bool installed: false
   property string installedVersion: ""
+  property bool pluginUpdateAvailable: false
+  property bool pluginUpdating: false
   property bool compatible: false
   property bool checkingInstallation: true
   property bool installationStateKnown: false
@@ -77,6 +79,36 @@ Panel {
   readonly property bool daemonOutdated: root.backendConnected
     && root.documentReady
     && Model.daemonNeedsRestart(root.installedVersion, root.document ? root.document.version : "")
+  // Every actionable row in one list, so their cursor positions cannot drift
+  // apart from what is on screen.
+  readonly property var actionRows: {
+    var rows = []
+    if (root.serviceBroken)
+      rows.push({
+        id: "restart-service",
+        icon: "󰑓",
+        title: "Restart hyprmoncfg",
+        subtitle: "Try the background service again"
+      })
+    else if (root.daemonOutdated)
+      rows.push({
+        id: "restart-service",
+        icon: "󰑓",
+        title: "Restart to finish updating",
+        subtitle: "hyprmoncfg was updated, but the previous version is still running"
+      })
+    if (root.pluginUpdateAvailable)
+      rows.push({
+        id: "update-plugin",
+        icon: "󰚰",
+        title: root.pluginUpdating ? "Updating this panel…" : "Update this panel",
+        subtitle: root.pluginUpdating
+          ? "Omarchy is pulling the new version"
+          : "A newer version of the hyprmoncfg panel is available"
+      })
+    return rows
+  }
+  readonly property int layoutRowIndex: 1 + root.actionRows.length
   readonly property bool serviceBroken: serviceStateKnown
     && serviceEnabled
     && !backendConnected
@@ -231,7 +263,7 @@ Panel {
 
   function itemCount() {
     if (!root.compatible) return 1
-    return root.serviceBroken ? 3 : 2
+    return root.layoutRowIndex + 1
   }
 
   function moveCursor(delta) {
@@ -248,8 +280,52 @@ Panel {
       root.setManaged(!root.managedChecked)
       return
     }
-    if (root.serviceBroken && root.cursorIndex === 1) root.restartService()
-    else root.launchTui()
+    var row = root.actionRows[root.cursorIndex - 1]
+    if (row) {
+      root.activateRow(String(row.id))
+      return
+    }
+    root.launchTui()
+  }
+
+  function activateRow(id) {
+    if (id === "restart-service") root.restartService()
+    else if (id === "update-plugin") root.updatePlugin()
+  }
+
+  function checkPluginUpdate() {
+    if (pluginUpdateProcess.running || root.pluginUpdating) return
+    pluginUpdateProcess.command = Model.pluginUpdateCheckCommand(root.moduleName, 6)
+    pluginUpdateProcess.running = true
+  }
+
+  function updatePlugin() {
+    if (pluginUpdateRunProcess.running || root.pluginUpdating) return
+    root.lastError = ""
+    root.pluginUpdating = true
+    pluginUpdateRunProcess.command = Model.pluginUpdateCommand(root.moduleName)
+    pluginUpdateRunProcess.running = true
+  }
+
+  Process {
+    id: pluginUpdateProcess
+    onExited: function(exitCode) {
+      // Only a clean "behind the remote" answer is worth acting on. A missing
+      // checkout or an unreachable remote is not the user's problem to solve.
+      root.pluginUpdateAvailable = exitCode === 10
+    }
+  }
+
+  Process {
+    id: pluginUpdateRunProcess
+    onExited: function(exitCode) {
+      root.pluginUpdating = false
+      if (exitCode === 0) {
+        root.pluginUpdateAvailable = false
+        return
+      }
+      root.lastError = "The panel update did not finish. Run `omarchy plugin update " + root.moduleName + "` to see why."
+    }
   }
 
   Component.onCompleted: root.checkInstallation()
@@ -259,6 +335,7 @@ Panel {
       root.cursorIndex = 0
       root.cursorActive = false
       root.checkInstallation()
+      root.checkPluginUpdate()
       if (root.compatible) root.checkServiceState()
     }
   }
@@ -727,32 +804,25 @@ Panel {
             }
 
             Column {
-              visible: root.serviceBroken
+              visible: root.actionRows.length > 0
               width: parent.width
               spacing: Style.space(10)
 
-              ActionRow {
-                width: parent.width
-                rowIndex: 1
-                icon: "󰑓"
-                title: "Restart hyprmoncfg"
-                subtitle: "Try the background service again"
-                onActivated: root.restartService()
-              }
-            }
+              Repeater {
+                model: root.actionRows
 
-            Column {
-              visible: root.daemonOutdated && !root.serviceBroken
-              width: parent.width
-              spacing: Style.space(10)
+                ActionRow {
+                  required property var modelData
+                  required property int index
 
-              ActionRow {
-                width: parent.width
-                rowIndex: 1
-                icon: "󰑓"
-                title: "Restart to finish updating"
-                subtitle: "hyprmoncfg was updated, but the previous version is still running"
-                onActivated: root.restartService()
+                  width: parent.width
+                  rowIndex: 1 + index
+                  icon: String(modelData.icon)
+                  title: String(modelData.title)
+                  subtitle: String(modelData.subtitle)
+                  enabled: !root.pluginUpdating || String(modelData.id) !== "update-plugin"
+                  onActivated: root.activateRow(String(modelData.id))
+                }
               }
             }
 
@@ -777,7 +847,7 @@ Panel {
                   width: parent.width
                   implicitHeight: Style.space(150)
                   bordered: true
-                  hasCursor: root.cursorActive && root.cursorIndex === (root.serviceBroken ? 2 : 1)
+                  hasCursor: root.cursorActive && root.cursorIndex === root.layoutRowIndex
                   foreground: root.foreground
 
                   Text {
@@ -883,7 +953,7 @@ Panel {
                     cursorShape: Qt.PointingHandCursor
                     onEntered: {
                       root.cursorActive = true
-                      root.cursorIndex = root.serviceBroken ? 2 : 1
+                      root.cursorIndex = root.layoutRowIndex
                     }
                     onClicked: root.launchTui()
                   }

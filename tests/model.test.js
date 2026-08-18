@@ -186,8 +186,9 @@ test("layout and settings stays live when management is off", () => {
   const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
   assert.match(qml, /root\.backendConnected \? monitorSummaries : \[\]/)
   assert.match(qml, /Quickshell\.screens \|\| \[\]/)
-  assert.match(qml, /else root\.launchTui\(\)/)
-  assert.match(qml, /hasCursor: root\.cursorActive && root\.cursorIndex === \(root\.serviceBroken \? 2 : 1\)/)
+  assert.match(qml, /root\.launchTui\(\)/)
+  // The layout editor is always the last row, whatever action rows precede it.
+  assert.match(qml, /hasCursor: root\.cursorActive && root\.cursorIndex === root\.layoutRowIndex/)
 })
 
 test("the profile explains the unmanaged state", () => {
@@ -250,5 +251,40 @@ test("an upgraded package whose daemon is still the old binary offers a restart"
   const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
   assert.match(qml, /readonly property bool daemonOutdated:/)
   assert.match(qml, /Restart to finish updating/)
-  assert.match(qml, /visible: root\.daemonOutdated && !root\.serviceBroken/)
+  assert.match(qml, /else if \(root\.daemonOutdated\)/)
+})
+
+test("the panel notices its own updates, since Omarchy never pulls plugins on its own", () => {
+  const check = Model.pluginUpdateCheckCommand("crmne.hyprmoncfg", 6)
+  assert.equal(check[0], "sh")
+  assert.deepEqual(check.slice(4), ["crmne.hyprmoncfg", "6"])
+  // The plugin id reaches the shell as an argument, never spliced into the script.
+  assert.doesNotMatch(check[2], /crmne\.hyprmoncfg/)
+  // Same comparison omarchy-plugin-update makes, and a throttle so opening the
+  // panel is not a reason to reach a remote every time.
+  assert.match(check[2], /git -C "\$dir" fetch --quiet origin HEAD/)
+  assert.match(check[2], /rev-parse HEAD/)
+  assert.match(check[2], /rev-parse FETCH_HEAD/)
+  assert.match(check[2], /newermt/)
+  assert.match(check[2], /exit 10/)
+
+  assert.deepEqual(Model.pluginUpdateCommand("crmne.hyprmoncfg"), [
+    "omarchy", "plugin", "update", "crmne.hyprmoncfg", "--yes"
+  ])
+
+  const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
+  assert.match(qml, /root\.pluginUpdateAvailable = exitCode === 10/)
+  assert.match(qml, /Update this panel/)
+})
+
+test("action rows keep their cursor positions in step with what is on screen", () => {
+  const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
+  // One list drives the rows, their indices, and the item count, so a new row
+  // cannot land on top of another one's position.
+  assert.match(qml, /readonly property var actionRows:/)
+  assert.match(qml, /readonly property int layoutRowIndex: 1 \+ root\.actionRows\.length/)
+  assert.match(qml, /rowIndex: 1 \+ index/)
+  assert.match(qml, /return root\.layoutRowIndex \+ 1/)
+  assert.doesNotMatch(qml, /serviceBroken \? 2 : 1/)
+  assert.doesNotMatch(qml, /serviceBroken \? 3 : 2/)
 })
