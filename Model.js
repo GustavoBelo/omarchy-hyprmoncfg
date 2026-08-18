@@ -159,6 +159,22 @@ function layoutRect(display, bounds, canvasWidth, canvasHeight, padding) {
   }
 }
 
+// releaseVersion pulls the plain version out of `hyprmoncfg version` output,
+// which also carries a commit and a build date.
+function releaseVersion(output) {
+  var match = String(output || "").match(/(\d+\.\d+\.\d+)/)
+  return match ? match[1] : ""
+}
+
+// daemonNeedsRestart reports an upgraded package whose daemon is still the
+// previous binary. Installing runs as root and cannot restart a user service,
+// so the old daemon keeps serving profiles until someone restarts it.
+function daemonNeedsRestart(installedOutput, daemonVersion) {
+  var installed = releaseVersion(installedOutput)
+  var running = releaseVersion(daemonVersion)
+  return installed !== "" && running !== "" && installed !== running
+}
+
 function versionAtLeast(output, minimum) {
   var text = String(output || "")
   if (/\bdev\b/.test(text)) return true
@@ -189,6 +205,8 @@ if (typeof module !== "undefined") {
     displayDetailLabel: displayDetailLabel,
     layoutBounds: layoutBounds,
     layoutRect: layoutRect,
+    releaseVersion: releaseVersion,
+    daemonNeedsRestart: daemonNeedsRestart,
     versionAtLeast: versionAtLeast
   }
 }

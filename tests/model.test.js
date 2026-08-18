@@ -235,3 +235,20 @@ test("an enabled service without IPC is a recoverable failure", () => {
   assert.match(qml, /title: "Restart hyprmoncfg"/)
   assert.match(qml, /\["systemctl", "--user", "restart", "hyprmoncfgd\.service"\]/)
 })
+
+test("an upgraded package whose daemon is still the old binary offers a restart", () => {
+  // Installing runs as root and cannot restart a user service, so the panel has
+  // to say so rather than leave the previous daemon quietly serving profiles.
+  assert.equal(Model.daemonNeedsRestart("hyprmoncfg 1.14.0 (abc, 2026-08-18)", "1.13.0"), true)
+  assert.equal(Model.daemonNeedsRestart("hyprmoncfg 1.14.0 (abc, 2026-08-18)", "1.14.0"), false)
+
+  // Nothing to say until both versions are known.
+  assert.equal(Model.daemonNeedsRestart("", "1.13.0"), false)
+  assert.equal(Model.daemonNeedsRestart("hyprmoncfg 1.14.0", ""), false)
+  assert.equal(Model.daemonNeedsRestart("hyprmoncfg dev", "1.13.0"), false)
+
+  const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
+  assert.match(qml, /readonly property bool daemonOutdated:/)
+  assert.match(qml, /Restart to finish updating/)
+  assert.match(qml, /visible: root\.daemonOutdated && !root\.serviceBroken/)
+})

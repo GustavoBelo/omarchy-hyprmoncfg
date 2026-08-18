@@ -17,6 +17,7 @@ Panel {
   readonly property var barIdentity: hostWidget || root
 
   property bool installed: false
+  property string installedVersion: ""
   property bool compatible: false
   property bool checkingInstallation: true
   property bool installationStateKnown: false
@@ -73,6 +74,9 @@ Panel {
   readonly property bool managedChecked: serviceActionPending
     ? serviceTargetManaged
     : (serviceEnabled || serviceActive || backendConnected)
+  readonly property bool daemonOutdated: root.backendConnected
+    && root.documentReady
+    && Model.daemonNeedsRestart(root.installedVersion, root.document ? root.document.version : "")
   readonly property bool serviceBroken: serviceStateKnown
     && serviceEnabled
     && !backendConnected
@@ -312,6 +316,7 @@ Panel {
       }
 
       root.installed = probedInstalled
+      root.installedVersion = probedInstalled ? String(versionOutput.text || "") : ""
       root.compatible = probedCompatible
       if (root.compatible) {
         root.installing = false
@@ -732,6 +737,21 @@ Panel {
                 icon: "󰑓"
                 title: "Restart hyprmoncfg"
                 subtitle: "Try the background service again"
+                onActivated: root.restartService()
+              }
+            }
+
+            Column {
+              visible: root.daemonOutdated && !root.serviceBroken
+              width: parent.width
+              spacing: Style.space(10)
+
+              ActionRow {
+                width: parent.width
+                rowIndex: 1
+                icon: "󰑓"
+                title: "Restart to finish updating"
+                subtitle: "hyprmoncfg was updated, but the previous version is still running"
                 onActivated: root.restartService()
               }
             }
