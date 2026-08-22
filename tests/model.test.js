@@ -137,20 +137,30 @@ test("the panel header uses the clear managed check at hero scale", () => {
   assert.match(qml, /color: Color\.accent/)
 })
 
-test("the panel treats the user service as the management boundary", () => {
+test("the panel hands monitor management over, not the user service", () => {
   const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
   assert.match(qml, /text: "MONITOR MANAGEMENT"/)
   assert.match(qml, /label: "Managed by hyprmoncfg"/)
   assert.match(qml, /Automatic switching on monitor hotplug and lid events/)
-  assert.match(qml, /\["systemctl", "--user", "enable", "--now", "hyprmoncfgd\.service"\]/)
-  assert.match(qml, /\["systemctl", "--user", "disable", "--now", "hyprmoncfgd\.service"\]/)
+  // Turning management on starts the unit and claims the displays.
+  assert.match(qml, /systemctl --user enable --now hyprmoncfgd\.service && hyprmoncfg manage/)
+  // Turning it off hands the config back and leaves the unit alone. Stopping
+  // the daemon never removed hyprmoncfg's include, so the generated rules kept
+  // loading last and kept winning.
+  assert.match(qml, /\["hyprmoncfg", "unmanage"\]/)
+  assert.doesNotMatch(qml, /"disable", "--now"/)
   assert.match(qml, /\["systemctl", "--user", "is-enabled", "--quiet", "hyprmoncfgd\.service"\]/)
   assert.match(qml, /\["systemctl", "--user", "is-active", "--quiet", "hyprmoncfgd\.service"\]/)
   assert.doesNotMatch(qml, /set_automation/)
   assert.doesNotMatch(qml, /automaticSwitching/)
   assert.doesNotMatch(qml, /settings\.json/)
   assert.match(qml, /serviceActionPending && !serviceProcess\.running/)
-  assert.match(qml, /root\.serviceTargetManaged\s*\? \(root\.serviceEnabled && root\.serviceActive\)/)
+  // Only the managed direction can be confirmed from systemctl now. Handing the
+  // displays back leaves the unit enabled and active, so that direction is
+  // confirmed by the daemon reporting itself unmanaged.
+  assert.match(qml, /root\.serviceTargetManaged\s*&& root\.serviceEnabled\s*&& root\.serviceActive/)
+  assert.match(qml, /root\.serviceTargetManaged === !unmanaged/)
+  assert.match(qml, /daemon\.unmanaged/)
 })
 
 test("each monitor discovers management started from another panel", () => {

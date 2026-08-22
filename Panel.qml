@@ -73,9 +73,12 @@ Panel {
     if (recommendedProfile !== "") return displays + " · Best match, not active"
     return displays + " · No matching profile"
   }
+  readonly property bool daemonUnmanaged: !!(root.document && root.document.daemon && root.document.daemon.unmanaged)
   readonly property bool managedChecked: serviceActionPending
     ? serviceTargetManaged
-    : (serviceEnabled || serviceActive || backendConnected)
+    : (root.documentReady && root.backendConnected
+      ? !root.daemonUnmanaged
+      : (serviceEnabled || serviceActive || backendConnected))
   readonly property string runningVersion: Model.releaseVersion(root.document ? root.document.version : "")
   readonly property string installedRelease: Model.releaseVersion(root.installedVersion)
   readonly property bool daemonOutdated: root.backendConnected
@@ -191,8 +194,8 @@ Panel {
     root.serviceTargetManaged = enabled === true
     root.serviceAction = enabled === true ? "enable" : "disable"
     serviceProcess.command = enabled === true
-      ? ["systemctl", "--user", "enable", "--now", "hyprmoncfgd.service"]
-      : ["systemctl", "--user", "disable", "--now", "hyprmoncfgd.service"]
+      ? ["sh", "-c", "systemctl --user enable --now hyprmoncfgd.service && hyprmoncfg manage"]
+      : ["hyprmoncfg", "unmanage"]
     serviceProcess.running = true
   }
 
@@ -241,6 +244,14 @@ Panel {
     if (!value || typeof value !== "object") return
     root.document = value
     root.documentReady = true
+    if (root.serviceActionPending) {
+      var unmanaged = !!(value.daemon && value.daemon.unmanaged)
+      if (root.serviceTargetManaged === !unmanaged) {
+        root.serviceActionPending = false
+        root.serviceAction = ""
+        serviceConfirmationTimer.stop()
+      }
+    }
   }
 
   function handleMessage(line) {
@@ -386,7 +397,7 @@ Panel {
       root.checkingInstallation = false
       root.installationStateKnown = true
       var probedInstalled = exitCode === 0
-      var probedCompatible = probedInstalled && Model.versionAtLeast(versionOutput.text, "1.12.0")
+      var probedCompatible = probedInstalled && Model.versionAtLeast(versionOutput.text, "1.15.0")
 
       if (root.installing && exitCode === 2) {
         root.installing = false
@@ -402,7 +413,7 @@ Panel {
         root.installing = false
         installPoll.stop()
         installTimeout.stop()
-        root.lastError = "The update finished, but hyprmoncfg 1.12.0 or newer is still required."
+        root.lastError = "The update finished, but hyprmoncfg 1.15.0 or newer is still required."
         return
       }
 
@@ -449,9 +460,12 @@ Panel {
         backendSocket.connected = false
       }
       if (root.serviceActionPending && !serviceProcess.running) {
+        // Turning management off no longer stops the unit, so only the
+        // managed direction can be confirmed from systemctl. The other one is
+        // confirmed by the daemon's status document in updateDocument.
         var confirmed = root.serviceTargetManaged
-          ? (root.serviceEnabled && root.serviceActive)
-          : (!root.serviceEnabled && !root.serviceActive)
+          && root.serviceEnabled
+          && root.serviceActive
         if (confirmed) {
           root.serviceActionPending = false
           root.serviceAction = ""
@@ -492,7 +506,7 @@ Panel {
         var fallback = action === "disable" ? "Could not return display management to Omarchy." : "Could not start hyprmoncfg."
         root.lastError = String(serviceStderr.text || fallback).trim()
       } else if (action === "disable") {
-        backendSocket.connected = false
+        root.checkServiceState()
       } else {
         root.connectionGrace = true
         connectionGraceTimer.restart()
