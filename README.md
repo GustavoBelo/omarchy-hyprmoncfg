@@ -27,7 +27,7 @@ A small background service is what watches for this. It catches hotplug, lid and
 
 - Nine colour management presets, from sRGB through wide gamut to HDR
 - Forced HDR, forced wide colour, and ICC profile paths
-- 8, 10 and 16-bit depth
+- 8 and 10-bit depth
 - SDR brightness, saturation and transfer curve, with luminance floors and ceilings for SDR and HDR
 - Variable refresh rate: off, on, or fullscreen only
 
