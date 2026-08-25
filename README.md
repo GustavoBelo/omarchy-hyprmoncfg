@@ -71,20 +71,27 @@ Upgrading the hyprmoncfg package is a separate matter: installing runs as root a
 
 ## Remove
 
-Hand your displays back first, then remove the panel:
+### Hand display management back to Omarchy
 
 ```sh
 hyprmoncfg unmanage
 omarchy plugin remove crmne.hyprmoncfg
 ```
 
-`unmanage` stops automatic switching, takes hyprmoncfg's line back out of your
-Hyprland config, hands Omarchy's monitor watcher back, and reloads. Without it,
-the generated rules keep loading last and keep winning, even with the panel
-gone. Run `hyprmoncfg manage` to hand it all back.
+`unmanage` stops automatic switching, removes the hyprmoncfg include from your Hyprland configuration, hands Omarchy's monitor watcher back, and reloads Hyprland. Omarchy or any other display tool can then control your monitor configuration normally.
 
-Your saved profiles stay put. Remove the package separately if you are done with
-hyprmoncfg entirely.
+The daemon remains enabled and running, but this is intentional and harmless: its persisted unmanaged state prevents it from applying profiles or changing your monitor configuration, and it sits idle without using CPU. Run `hyprmoncfg manage` if you want it to take control again.
+
+### Fully uninstall hyprmoncfg
+
+Stopping and removing the daemon is not required after `unmanage`. If you nevertheless want to remove hyprmoncfg completely, run the commands above and then:
+
+```sh
+systemctl --user disable --now hyprmoncfgd.service
+omarchy pkg drop hyprmoncfg
+```
+
+Your saved profiles remain in `~/.config/hyprmoncfg/profiles`.
 
 ## Development
 
