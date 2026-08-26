@@ -365,6 +365,23 @@ test("the compact change row becomes the one preview confirmation row", () => {
   assert.match(qml, /root\.pendingProfileName !== ""/)
 })
 
+test("display previews keep a shell-level confirmation across monitor rebuilds", () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "manifest.json"), "utf8"))
+  const panel = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
+  const guard = fs.readFileSync(path.join(__dirname, "..", "PreviewGuard.qml"), "utf8")
+
+  assert.deepEqual(manifest.kinds, ["bar-widget", "service"])
+  assert.equal(manifest.entryPoints.service, "PreviewGuard.qml")
+  assert.match(panel, /previewCoordinator\.startDraftPreview/)
+  assert.match(panel, /previewCoordinator\.startSavedProfilePreview/)
+  assert.match(panel, /!root\.previewCoordinator && !root\.opened/)
+  assert.match(guard, /root\.stage = "applying"/)
+  assert.match(guard, /This confirmation stays open while your displays reconfigure\./)
+  assert.match(guard, /WlrKeyboardFocus\.Exclusive/)
+  assert.match(guard, /model: root\.opened \? Quickshell\.screens : \[\]/)
+  assert.match(guard, /onClicked: function\(mouse\) \{ mouse\.accepted = true \}/)
+})
+
 test("manual profile choice is explicit and can return to automatic matching", () => {
   const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
   assert.match(qml, /label: "Automatically use the best profile"/)

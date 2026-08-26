@@ -187,6 +187,11 @@ Panel {
   readonly property string socketPath: root.runtimeDir + "/hyprmoncfgd.sock"
   readonly property string installFailurePath: root.runtimeDir + "/hyprmoncfg-panel-install.failed"
   readonly property string installCompletePath: root.runtimeDir + "/hyprmoncfg-panel-install.complete"
+  readonly property var previewCoordinator: {
+    var host = root.bar && root.bar.shell ? root.bar.shell : null
+    var services = host ? host._services : null
+    return services && services[root.moduleName] ? services[root.moduleName] : null
+  }
   readonly property bool barIconDimmed: root.installationStateKnown
     && root.compatible
     && root.serviceStateKnown
@@ -278,7 +283,7 @@ Panel {
 
   function openFromHotkey() { root.open() }
   function close() {
-    if (root.previewTransaction !== "") root.revertPreview()
+    if (root.previewTransaction !== "" && !root.previewCoordinator) root.revertPreview()
     root.controller.hide()
   }
 
@@ -505,6 +510,16 @@ Panel {
     }
     root.lastError = ""
     root.previewPending = true
+    if (root.previewCoordinator
+        && typeof root.previewCoordinator.startDraftPreview === "function") {
+      if (!root.previewCoordinator.startDraftPreview(
+          Model.namedProfile(root.draftProfile, name), 10)) {
+        root.previewPending = false
+        root.lastError = String(root.previewCoordinator.errorMessage
+          || "Could not open the display confirmation.")
+      }
+      return
+    }
     root.send("preview", {
       profile: Model.namedProfile(root.draftProfile, name),
       timeout_seconds: 10,
@@ -522,6 +537,15 @@ Panel {
     }
     root.lastError = ""
     root.previewPending = true
+    if (root.previewCoordinator
+        && typeof root.previewCoordinator.startSavedProfilePreview === "function") {
+      if (!root.previewCoordinator.startSavedProfilePreview(selected, 10)) {
+        root.previewPending = false
+        root.lastError = String(root.previewCoordinator.errorMessage
+          || "Could not open the display confirmation.")
+      }
+      return
+    }
     root.send("preview", { profile_name: selected, timeout_seconds: 10 }, {
       kind: "profile",
       name: selected
@@ -560,6 +584,11 @@ Panel {
   function keepPreview() {
     if (root.previewTransaction === "" || root.previewPending) return
     root.previewPending = true
+    if (root.previewCoordinator
+        && String(root.previewCoordinator.transactionId || "") === root.previewTransaction) {
+      if (!root.previewCoordinator.keep()) root.previewPending = false
+      return
+    }
     root.send("commit", {
       transaction_id: root.previewTransaction,
       save: root.previewKind === "draft"
@@ -569,6 +598,11 @@ Panel {
   function revertPreview() {
     if (root.previewTransaction === "" || root.previewPending) return
     root.previewPending = true
+    if (root.previewCoordinator
+        && String(root.previewCoordinator.transactionId || "") === root.previewTransaction) {
+      if (!root.previewCoordinator.revert()) root.previewPending = false
+      return
+    }
     root.send("revert", { transaction_id: root.previewTransaction }, { kind: root.previewKind })
   }
 
@@ -618,7 +652,8 @@ Panel {
       }
       root.updatePreviewClock()
       previewTimer.start()
-      if (!root.opened && !previewRecoveryTimer.running) previewRecoveryTimer.start()
+      if (!root.previewCoordinator && !root.opened && !previewRecoveryTimer.running)
+        previewRecoveryTimer.start()
       return
     }
     if (root.previewTransaction !== "" && !root.previewPending) root.clearPreview(false)
@@ -758,6 +793,15 @@ Panel {
   }
 
   Component.onCompleted: root.checkInstallation()
+
+  Connections {
+    target: root.previewCoordinator
+    ignoreUnknownSignals: true
+    function onRequestFinished(success, message) {
+      root.previewPending = false
+      if (!success && String(message || "") !== "") root.lastError = String(message)
+    }
+  }
 
   onOpenedChanged: {
     if (opened) {
