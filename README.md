@@ -4,7 +4,7 @@ An Omarchy bar panel for [hyprmoncfg](https://hyprmoncfg.dev/). Create multi-mon
 
 ![hyprmoncfg for Omarchy](preview.png)
 
-The panel shows your live layout, the active profile, and a switch to hand display management back to Omarchy. The editor opens from it for everything below.
+The compact panel shows your live layout, controls brightness for the selected display, reports the matched profile, and prompts you to create one when a new monitor setup appears. Expand it for the full spatial editor, profile browser, and workspace planner. The TUI remains available for a keyboard-first or standalone workflow.
 
 ## Automatically match the right layout to the connected monitors
 
@@ -15,6 +15,11 @@ It knows your monitors apart by make, model and serial, not by which port they a
 A small background service is what watches for this. It catches hotplug, lid and wake events as they happen, including before the bar has started and coming out of a suspend.
 
 ## What it does
+
+**Live controls**
+
+- Per-display brightness for the monitor selected on the layout, using Omarchy's own internal-backlight, DDC/CI, and Apple Display support
+- Brightness stays live hardware state rather than being stored in layout profiles, and changes made by Omarchy's panel or brightness keys remain compatible
 
 **Layout**
 
@@ -61,7 +66,7 @@ The installer explicitly restarts the daemon after installing or updating the pa
 ## Requirements
 
 - Omarchy Quattro with third-party shell plugins
-- hyprmoncfg 1.12.0 or newer (installed from the panel when missing)
+- hyprmoncfg 1.16.0 or newer (installed from the panel when missing)
 
 ## Staying up to date
 

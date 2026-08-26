@@ -111,6 +111,15 @@ function displayDetailLabel(display) {
   return parts.join(" · ")
 }
 
+function displayScaleLayoutLabel(display) {
+  var monitor = display || {}
+  var scale = Number(monitor.scale || 1)
+  if (!isFinite(scale) || scale <= 0) scale = 1
+  var logicalWidth = Math.max(1, Math.round(Number(monitor.width || 1)))
+  var logicalHeight = Math.max(1, Math.round(Number(monitor.height || 1)))
+  return formatScale(scale) + "x = " + logicalWidth + "×" + logicalHeight
+}
+
 function layoutBounds(displays) {
   var list = displays || []
   if (list.length === 0) return { x: 0, y: 0, width: 1, height: 1 }
@@ -157,6 +166,389 @@ function layoutRect(display, bounds, canvasWidth, canvasHeight, padding) {
     width: Math.max(1, Number(item.width || 1) * scale),
     height: Math.max(1, Number(item.height || 1) * scale)
   }
+}
+
+function clone(value) {
+  try {
+    return JSON.parse(JSON.stringify(value))
+  } catch (e) {
+    return null
+  }
+}
+
+function validEditorDocument(value) {
+  return !!value && typeof value === "object"
+    && value.profile && typeof value.profile === "object"
+    && value.profile.outputs instanceof Array
+    && value.displays instanceof Array
+}
+
+function editorMetadata(editorDisplays, key) {
+  var displays = editorDisplays instanceof Array ? editorDisplays : []
+  for (var i = 0; i < displays.length; i++) {
+    if (String((displays[i] || {}).key || "") === String(key || "")) return displays[i]
+  }
+  return {}
+}
+
+function outputLogicalSize(output) {
+  var item = output || {}
+  var scale = Number(item.scale || 1)
+  if (!isFinite(scale) || scale <= 0) scale = 1
+  var width = Math.max(1, Math.round(Number(item.width || 1) / scale))
+  var height = Math.max(1, Math.round(Number(item.height || 1) / scale))
+  if (Math.abs(Number(item.transform || 0)) % 2 === 1) {
+    var swap = width
+    width = height
+    height = swap
+  }
+  return { width: width, height: height }
+}
+
+function outputMode(output) {
+  var item = output || {}
+  var mode = String(item.mode || "").trim()
+  if (mode !== "") return mode
+  var width = Number(item.width || 0)
+  var height = Number(item.height || 0)
+  var refresh = Number(item.refresh || 0)
+  if (width <= 0 || height <= 0) return "preferred"
+  return width + "x" + height + (refresh > 0 ? "@" + refresh.toFixed(2) + "Hz" : "")
+}
+
+function profileLayoutDisplays(profile, editorDisplays) {
+  var outputs = profile && profile.outputs instanceof Array ? profile.outputs : []
+  var result = []
+  for (var i = 0; i < outputs.length; i++) {
+    var output = outputs[i] || {}
+    if (output.enabled === false || mirrorTarget(output) !== "") continue
+    var logical = outputLogicalSize(output)
+    var metadata = editorMetadata(editorDisplays, output.key)
+    var connected = Object.keys(metadata).length > 0
+    result.push({
+      key: String(output.key || ""),
+      name: String(output.name || "Display"),
+      description: String(output.description || ""),
+      make: String(output.make || ""),
+      model: String(output.model || ""),
+      serial: String(output.serial || ""),
+      mode: outputMode(output),
+      scale: Number(output.scale || 1),
+      internal: /^(eDP|LVDS|DSI)-/i.test(String(output.name || "")),
+      focused: metadata.focused === true,
+      connected: connected,
+      x: Number(output.x || 0),
+      y: Number(output.y || 0),
+      width: logical.width,
+      height: logical.height
+    })
+  }
+  return result
+}
+
+function hiddenProfileDisplays(profile) {
+  var outputs = profile && profile.outputs instanceof Array ? profile.outputs : []
+  var off = []
+  var mirrored = []
+  for (var i = 0; i < outputs.length; i++) {
+    var output = outputs[i] || {}
+    var name = String(output.name || "Display")
+    if (output.enabled === false) off.push(name)
+    else if (mirrorTarget(output) !== "") mirrored.push(name + " → " + outputName(profile, mirrorTarget(output)))
+  }
+  var parts = []
+  if (off.length) parts.push("Off: " + off.join(", "))
+  if (mirrored.length) parts.push("Mirrored: " + mirrored.join(", "))
+  return parts.join("   ")
+}
+
+function outputByKey(profile, key) {
+  var outputs = profile && profile.outputs instanceof Array ? profile.outputs : []
+  for (var i = 0; i < outputs.length; i++) {
+    if (String((outputs[i] || {}).key || "") === String(key || "")) return outputs[i]
+  }
+  return null
+}
+
+function outputName(profile, key) {
+  var output = outputByKey(profile, key)
+  return output ? String(output.name || key || "Display") : String(key || "Display")
+}
+
+function outputDisplayLabel(profile, key) {
+  var output = outputByKey(profile, key)
+  if (!output) return String(key || "Display")
+  var makeModel = (String(output.make || "") + " " + String(output.model || "")).trim()
+  return makeModel || String(output.description || "").trim() || String(output.name || key || "Display")
+}
+
+function clampBrightness(value) {
+  var number = Number(value)
+  if (!isFinite(number)) return 1
+  return Math.max(1, Math.min(100, Math.round(number)))
+}
+
+// Brightness is live hardware state, not profile state. Resolve the selected
+// profile output back to a connector only while that output is connected and
+// enabled, then give the panel a friendly label that cannot be mistaken for a
+// global brightness control.
+function brightnessTarget(profile, key, editorDisplays) {
+  var output = outputByKey(profile, key)
+  var metadata = editorMetadata(editorDisplays, key)
+  if (!output || output.enabled === false || Object.keys(metadata).length === 0) {
+    return { connector: "", label: "" }
+  }
+
+  var connector = String(output.name || "").trim()
+  if (connector === "") return { connector: "", label: "" }
+  var makeModel = (String(output.make || "") + " " + String(output.model || "")).trim()
+  var label = makeModel || String(output.description || "").trim() || connector
+  return { connector: connector, label: label }
+}
+
+function initialOutputKey(profile, editorDisplays) {
+  var displays = editorDisplays instanceof Array ? editorDisplays : []
+  for (var i = 0; i < displays.length; i++) {
+    if (displays[i] && displays[i].focused) return String(displays[i].key || "")
+  }
+  var outputs = profile && profile.outputs instanceof Array ? profile.outputs : []
+  for (var j = 0; j < outputs.length; j++) {
+    if (outputs[j] && outputs[j].enabled !== false) return String(outputs[j].key || "")
+  }
+  return outputs.length ? String((outputs[0] || {}).key || "") : ""
+}
+
+function modeOptions(editorDisplays, key) {
+  var metadata = editorMetadata(editorDisplays, key)
+  var modes = metadata.available_modes instanceof Array ? metadata.available_modes : []
+  return modes.map(function(mode) {
+    var value = String(mode || "")
+    return { value: value, label: displayDetailLabel({ mode: value, scale: 1 }).replace(/ · 1x$/, "") }
+  })
+}
+
+function formatScale(value) {
+  var number = Number(value)
+  if (!isFinite(number) || number <= 0) number = 1
+  return String(Math.round(number * 100000) / 100000)
+}
+
+function scaleOptions(editorDisplays, key, current) {
+  var metadata = editorMetadata(editorDisplays, key)
+  var values = metadata.scale_options instanceof Array ? metadata.scale_options.slice() : []
+  var normalizedCurrent = formatScale(current)
+  var found = false
+  for (var i = 0; i < values.length; i++) {
+    if (formatScale(values[i]) === normalizedCurrent) found = true
+  }
+  if (!found) values.push(Number(current || 1))
+  values.sort(function(a, b) { return Number(a) - Number(b) })
+  return values.map(function(value) {
+    var formatted = formatScale(value)
+    return { value: formatted, label: formatted + "x" }
+  })
+}
+
+function mirrorOptions(profile, selectedKey) {
+  var options = [{ value: "", label: "None" }]
+  var outputs = profile && profile.outputs instanceof Array ? profile.outputs : []
+  for (var i = 0; i < outputs.length; i++) {
+    var output = outputs[i] || {}
+    if (String(output.key || "") === String(selectedKey || "") || output.enabled === false) continue
+    options.push({ value: String(output.key || ""), label: String(output.name || "Display") })
+  }
+  return options
+}
+
+function outputOptions(profile) {
+  var outputs = profile && profile.outputs instanceof Array ? profile.outputs : []
+  return outputs.map(function(output) {
+    var item = output || {}
+    return {
+      value: String(item.key || ""),
+      label: String(item.name || "Display") + (item.enabled === false ? " · off" : "")
+    }
+  })
+}
+
+function profileOptions(document) {
+  var profiles = document && document.profiles instanceof Array ? document.profiles : []
+  var options = []
+  for (var i = 0; i < profiles.length; i++) {
+    var profile = profiles[i] || {}
+    if (Number(profile.connected_enabled_outputs || 0) <= 0) continue
+    var suffix = profile.active ? " · active" : (profile.recommended ? " · best match" : "")
+    options.push({ value: String(profile.name || ""), label: String(profile.name || "Profile") + suffix })
+  }
+  return options
+}
+
+function savedProfileByName(editorDocument, name) {
+  var profiles = editorDocument && editorDocument.profiles instanceof Array ? editorDocument.profiles : []
+  for (var i = 0; i < profiles.length; i++) {
+    if (String((profiles[i] || {}).name || "") === String(name || "")) return profiles[i]
+  }
+  return null
+}
+
+function profileSummaryByName(document, name) {
+  var profiles = document && document.profiles instanceof Array ? document.profiles : []
+  for (var i = 0; i < profiles.length; i++) {
+    if (String((profiles[i] || {}).name || "") === String(name || "")) return profiles[i]
+  }
+  return null
+}
+
+// The daemon owns display matching. This helper only picks the exact match it
+// already identified so the panel can decide whether the current hardware set
+// needs its own profile.
+function exactDisplayProfile(document) {
+  var profiles = document && document.profiles instanceof Array ? document.profiles : []
+  var active = null
+  var first = null
+  for (var i = 0; i < profiles.length; i++) {
+    var item = profiles[i] || {}
+    if (item.exact_display_match !== true) continue
+    if (item.recommended === true) return item
+    if (item.active === true) active = item
+    if (!first) first = item
+  }
+  return active || first
+}
+
+function profileWorkspacePlan(editorDocument, name) {
+  var plans = editorDocument && editorDocument.profile_workspace_plans
+  if (!plans || typeof plans !== "object") return []
+  var plan = plans[String(name || "")]
+  return plan instanceof Array ? plan : []
+}
+
+function displayType(metadata, output) {
+  var live = metadata || {}
+  var saved = output || {}
+  return live.internal === true || /^(eDP|LVDS|DSI)-/i.test(String(saved.name || ""))
+    ? "Internal display"
+    : "External display"
+}
+
+function onOff(value) {
+  return value === true ? "on" : "off"
+}
+
+function profileWorkspaceSummary(profile) {
+  var settings = (profile || {}).workspaces || {}
+  if (!settings.enabled) return "Disabled"
+  var strategy = String(settings.strategy || "manual")
+  var maximum = Number(settings.max_workspaces || 0)
+  return strategy.charAt(0).toUpperCase() + strategy.slice(1)
+    + (maximum > 0 ? " · " + maximum + " workspaces" : "")
+}
+
+function profileMatchLabel(summary) {
+  var item = summary || {}
+  var label = item.active ? "Active"
+    : (item.recommended ? "Recommended"
+      : (Number(item.match_score || 0) > 0 ? "Partial match" : "No match"))
+  return Number(item.match_score || 0) > 0 ? label + " · score " + Number(item.match_score) : label
+}
+
+function matchReasonLabel(kind) {
+  switch (String(kind || "")) {
+    case "connected": return "connected"
+    case "connected_kept_off": return "connected, kept off"
+    case "not_connected": return "not connected"
+    case "not_connected_kept_off": return "not connected, kept off"
+    case "connected_unknown": return "connected, not in profile"
+    default: return ""
+  }
+}
+
+function profileMatchReasonRows(summary) {
+  var item = summary || {}
+  var reasons = item.match_reasons instanceof Array ? item.match_reasons : []
+  return reasons.map(function(reason) {
+    var count = Number((reason || {}).count || 0)
+    var points = Number((reason || {}).points || 0)
+    var score = Number(item.match_score || 0)
+    var arithmetic = score > 0 ? (points > 0 ? "+" : "") + points + "   " : ""
+    return {
+      value: arithmetic + count + (count === 1 ? " display " : " displays ") + matchReasonLabel(reason.kind),
+      positive: points > 0
+    }
+  })
+}
+
+function profileHiddenDisplayRows(profile) {
+  var p = profile || {}
+  var outputs = p.outputs instanceof Array ? p.outputs : []
+  var rows = []
+  var keptOff = []
+  var mirrors = []
+  for (var i = 0; i < outputs.length; i++) {
+    var output = outputs[i] || {}
+    if (output.enabled === false) keptOff.push(outputDisplayLabel(p, output.key))
+    else if (mirrorTarget(output) !== "") {
+      mirrors.push(outputDisplayLabel(p, output.key) + " → " + outputDisplayLabel(p, mirrorTarget(output)))
+    }
+  }
+  for (var off = 0; off < keptOff.length; off++)
+    rows.push({ label: off === 0 ? "Kept off" : "", value: keptOff[off] })
+  for (var mirror = 0; mirror < mirrors.length; mirror++)
+    rows.push({ label: mirror === 0 ? "Mirrors" : "", value: mirrors[mirror] })
+  return rows
+}
+
+function profileUpdatedLabel(value) {
+  var date = new Date(String(value || ""))
+  if (!isFinite(date.getTime())) return "—"
+  function pad(number) { return Number(number) < 10 ? "0" + Number(number) : String(number) }
+  return date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate())
+    + " " + pad(date.getHours()) + ":" + pad(date.getMinutes())
+}
+
+function workspacePlanRows(plan, profile) {
+  var rows = plan instanceof Array ? plan : []
+  return rows.map(function(row) {
+    var item = row || {}
+    var workspaces = item.workspaces instanceof Array ? item.workspaces.join(", ") : ""
+    return {
+      key: String(item.output_key || ""),
+      name: profile ? outputDisplayLabel(profile, item.output_key) : String(item.output_name || "Display"),
+      workspaces: workspaces || "—"
+    }
+  })
+}
+
+function enabledOutputCount(profile) {
+  var outputs = profile && profile.outputs instanceof Array ? profile.outputs : []
+  var count = 0
+  for (var i = 0; i < outputs.length; i++) if (outputs[i] && outputs[i].enabled !== false) count++
+  return count
+}
+
+function layoutMetrics(bounds, canvasWidth, canvasHeight, padding) {
+  var area = bounds || layoutBounds([])
+  var inset = Math.max(0, Number(padding || 0))
+  var usableWidth = Math.max(1, Number(canvasWidth || 1) - inset * 2)
+  var usableHeight = Math.max(1, Number(canvasHeight || 1) - inset * 2)
+  return { scale: Math.min(usableWidth / area.width, usableHeight / area.height) }
+}
+
+function workspaceText(plan, outputKey) {
+  var rows = plan instanceof Array ? plan : []
+  for (var i = 0; i < rows.length; i++) {
+    if (String((rows[i] || {}).output_key || "") === String(outputKey || "")) {
+      var workspaces = rows[i].workspaces instanceof Array ? rows[i].workspaces : []
+      return workspaces.join(", ")
+    }
+  }
+  return ""
+}
+
+function namedProfile(profile, name) {
+  var copy = clone(profile) || { outputs: [] }
+  copy.name = String(name || "").trim()
+  return copy
 }
 
 // Omarchy installs plugins as git checkouts under ~/.config/omarchy/plugins and
@@ -248,8 +640,44 @@ if (typeof module !== "undefined") {
     layoutDisplays: layoutDisplays,
     displayModelLabel: displayModelLabel,
     displayDetailLabel: displayDetailLabel,
+    displayScaleLayoutLabel: displayScaleLayoutLabel,
     layoutBounds: layoutBounds,
     layoutRect: layoutRect,
+    clone: clone,
+    validEditorDocument: validEditorDocument,
+    editorMetadata: editorMetadata,
+    outputLogicalSize: outputLogicalSize,
+    outputMode: outputMode,
+    profileLayoutDisplays: profileLayoutDisplays,
+    hiddenProfileDisplays: hiddenProfileDisplays,
+    outputByKey: outputByKey,
+    outputName: outputName,
+    outputDisplayLabel: outputDisplayLabel,
+    clampBrightness: clampBrightness,
+    brightnessTarget: brightnessTarget,
+    initialOutputKey: initialOutputKey,
+    modeOptions: modeOptions,
+    formatScale: formatScale,
+    scaleOptions: scaleOptions,
+    mirrorOptions: mirrorOptions,
+    outputOptions: outputOptions,
+    profileOptions: profileOptions,
+    savedProfileByName: savedProfileByName,
+    profileSummaryByName: profileSummaryByName,
+    exactDisplayProfile: exactDisplayProfile,
+    profileWorkspacePlan: profileWorkspacePlan,
+    displayType: displayType,
+    onOff: onOff,
+    profileWorkspaceSummary: profileWorkspaceSummary,
+    profileMatchLabel: profileMatchLabel,
+    profileMatchReasonRows: profileMatchReasonRows,
+    profileHiddenDisplayRows: profileHiddenDisplayRows,
+    profileUpdatedLabel: profileUpdatedLabel,
+    workspacePlanRows: workspacePlanRows,
+    enabledOutputCount: enabledOutputCount,
+    layoutMetrics: layoutMetrics,
+    workspaceText: workspaceText,
+    namedProfile: namedProfile,
     pluginUpdateCheckCommand: pluginUpdateCheckCommand,
     pluginUpdateCommand: pluginUpdateCommand,
     shellRestartCommand: shellRestartCommand,
