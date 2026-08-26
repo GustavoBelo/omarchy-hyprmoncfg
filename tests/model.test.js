@@ -4,7 +4,7 @@ const fs = require("node:fs")
 const path = require("node:path")
 const Model = require("../Model.js")
 
-test("installation uses Omarchy's presented AUR flow, restarts the daemon, and opens a centered TUI", () => {
+test("installation and upgrades use a presented AUR flow, restart the daemon, and open a centered TUI", () => {
   assert.deepEqual(Model.installProcessArgs(), [
     "omarchy",
     "launch",
@@ -12,7 +12,7 @@ test("installation uses Omarchy's presented AUR flow, restarts the daemon, and o
     "terminal",
     "with",
     "presentation",
-    "rm -f \"$XDG_RUNTIME_DIR/hyprmoncfg-panel-install.failed\" \"$XDG_RUNTIME_DIR/hyprmoncfg-panel-install.complete\"; status=0; omarchy pkg aur add hyprmoncfg && systemctl --user enable hyprmoncfgd.service && systemctl --user restart hyprmoncfgd.service && setsid -f gtk-launch hyprmoncfg-omarchy >/dev/null 2>&1 || status=$?; if (( status == 0 )); then : > \"$XDG_RUNTIME_DIR/hyprmoncfg-panel-install.complete\"; else printf '%s\\n' \"$status\" > \"$XDG_RUNTIME_DIR/hyprmoncfg-panel-install.failed\"; fi; (exit \"$status\")"
+    "rm -f \"$XDG_RUNTIME_DIR/hyprmoncfg-panel-install.failed\" \"$XDG_RUNTIME_DIR/hyprmoncfg-panel-install.complete\"; status=0; if pacman -Q hyprmoncfg >/dev/null 2>&1; then yay -S --noconfirm --needed --cleanafter hyprmoncfg; else omarchy pkg aur add hyprmoncfg; fi && systemctl --user enable hyprmoncfgd.service && systemctl --user restart hyprmoncfgd.service && setsid -f gtk-launch hyprmoncfg-omarchy >/dev/null 2>&1 || status=$?; if (( status == 0 )); then : > \"$XDG_RUNTIME_DIR/hyprmoncfg-panel-install.complete\"; else printf '%s\\n' \"$status\" > \"$XDG_RUNTIME_DIR/hyprmoncfg-panel-install.failed\"; fi; (exit \"$status\")"
   ])
 })
 

@@ -71,10 +71,17 @@ omarchy plugin add https://github.com/crmne/omarchy-hyprmoncfg.git --enable
 If hyprmoncfg is missing, open the panel and choose **Install hyprmoncfg**. Omarchy opens its normal presented terminal and runs:
 
 ```sh
-omarchy pkg aur add hyprmoncfg && systemctl --user enable hyprmoncfgd.service && systemctl --user restart hyprmoncfgd.service && setsid -f gtk-launch hyprmoncfg-omarchy >/dev/null 2>&1
+if pacman -Q hyprmoncfg >/dev/null 2>&1; then
+  yay -S --noconfirm --needed --cleanafter hyprmoncfg
+else
+  omarchy pkg aur add hyprmoncfg
+fi
+systemctl --user enable hyprmoncfgd.service
+systemctl --user restart hyprmoncfgd.service
+setsid -f gtk-launch hyprmoncfg-omarchy >/dev/null 2>&1
 ```
 
-The installer explicitly restarts the daemon after installing or updating the package, so an already-running service immediately uses the new binary. It then opens hyprmoncfg through its hidden Omarchy desktop launcher. That launcher ships with the main package and carries Omarchy's standard `TUI.float` window identity, so the editor opens centered at the normal floating size without putting Omarchy-specific window logic in the panel. Saving a profile updates the panel immediately over IPC. The plugin never runs `yay` or requests privileges invisibly inside `omarchy-shell`.
+The installer uses Omarchy's install helper when the package is missing and upgrades an existing package directly through `yay`. Both commands run in Omarchy's presented terminal, never invisibly inside `omarchy-shell`. After a successful install or upgrade it explicitly restarts the daemon, so an already-running service immediately uses the new binary, then opens hyprmoncfg through its hidden Omarchy desktop launcher. That launcher ships with the main package and carries Omarchy's standard `TUI.float` window identity, so the editor opens centered at the normal floating size without putting Omarchy-specific window logic in the panel. Saving a profile updates the panel immediately over IPC.
 
 ## Requirements
 
