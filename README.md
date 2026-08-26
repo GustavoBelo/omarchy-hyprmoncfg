@@ -4,7 +4,20 @@ An Omarchy bar panel for [hyprmoncfg](https://hyprmoncfg.dev/). Create multi-mon
 
 ![hyprmoncfg for Omarchy](preview.png)
 
-The compact panel shows your live layout, controls brightness for the selected display, reports the matched profile, and prompts you to create one when a new monitor setup appears. Expand it for the full spatial editor, profile browser, and workspace planner. The TUI remains available for a keyboard-first or standalone workflow.
+Version 2.0 brings the panel to practical feature parity with the TUI for monitor layouts, profiles, and workspace planning—and then goes further with direct pointer-driven arrangement and per-display brightness. The compact view keeps the everyday controls close; expand it for the complete spatial editor. The TUI remains available for a keyboard-first or standalone workflow.
+
+<details>
+<summary>See the expanded editor</summary>
+
+### Layout and display controls
+
+![Expanded monitor layout and display editor](screenshots/layout.png)
+
+### Saved profiles
+
+![Expanded saved profile browser](screenshots/profiles.png)
+
+</details>
 
 ## Automatically match the right layout to the connected monitors
 
