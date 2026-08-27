@@ -564,11 +564,15 @@ function pluginUpdateCheckCommand(pluginId, throttleHours) {
     "-c",
     'set -e; ' +
       'dir="$HOME/.config/omarchy/plugins/$1"; ' +
-      'stamp="${XDG_RUNTIME_DIR:-/tmp}/$1.update-check"; ' +
       '[ -d "$dir/.git" ] || exit 3; ' +
+      'runtime="${XDG_RUNTIME_DIR:-}"; ' +
+      '[ -n "$runtime" ] && [ -d "$runtime" ] || exit 6; ' +
+      '[ "$(stat -c "%u:%a" -- "$runtime" 2>/dev/null)" = "$(id -u):700" ] || exit 6; ' +
+      'stamp="$runtime/$1.update-check"; ' +
       'if [ -z "$(find "$stamp" -newermt "-$2 hours" 2>/dev/null)" ]; then ' +
       'git -C "$dir" fetch --quiet origin HEAD 2>/dev/null || exit 4; ' +
-      ': > "$stamp"; fi; ' +
+      '[ ! -L "$stamp" ] || exit 6; ' +
+      '(umask 077; touch --no-dereference -- "$stamp") || exit 6; fi; ' +
       'head=$(git -C "$dir" rev-parse HEAD 2>/dev/null) || exit 5; ' +
       'remote=$(git -C "$dir" rev-parse FETCH_HEAD 2>/dev/null) || exit 5; ' +
       '[ "$head" = "$remote" ] || exit 10',

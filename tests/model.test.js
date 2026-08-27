@@ -1,6 +1,8 @@
 const test = require("node:test")
 const assert = require("node:assert/strict")
+const childProcess = require("node:child_process")
 const fs = require("node:fs")
+const os = require("node:os")
 const path = require("node:path")
 const Model = require("../Model.js")
 
@@ -574,6 +576,13 @@ test("the panel notices its own updates, since Omarchy never pulls plugins on it
   assert.match(check[2], /rev-parse FETCH_HEAD/)
   assert.match(check[2], /newermt/)
   assert.match(check[2], /exit 10/)
+  assert.match(check[2], /XDG_RUNTIME_DIR/)
+  assert.match(check[2], /stat -c "%u:%a"/)
+  assert.match(check[2], /\$\(id -u\):700/)
+  assert.match(check[2], /\[ ! -L "\$stamp" \]/)
+  assert.match(check[2], /touch --no-dereference/)
+  assert.doesNotMatch(check[2], /: > "\$stamp"/)
+  assert.doesNotMatch(check[2], /\/tmp/)
 
   assert.deepEqual(Model.pluginUpdateCommand("crmne.hyprmoncfg"), [
     "omarchy", "plugin", "update", "crmne.hyprmoncfg", "--yes"
@@ -582,6 +591,31 @@ test("the panel notices its own updates, since Omarchy never pulls plugins on it
   const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
   assert.match(qml, /root\.pluginUpdateAvailable = exitCode === 10/)
   assert.match(qml, /Update this panel/)
+})
+
+test("the panel update check refuses missing or non-private runtime directories", () => {
+  const check = Model.pluginUpdateCheckCommand("crmne.hyprmoncfg", 6)
+  const temporaryHome = fs.mkdtempSync(path.join(os.tmpdir(), "hyprmoncfg-update-check-"))
+  const pluginGit = path.join(temporaryHome, ".config", "omarchy", "plugins", "crmne.hyprmoncfg", ".git")
+  const insecureRuntime = path.join(temporaryHome, "runtime")
+
+  fs.mkdirSync(pluginGit, { recursive: true })
+  fs.mkdirSync(insecureRuntime, { mode: 0o755 })
+
+  function run(runtime) {
+    return childProcess.spawnSync(check[0], check.slice(1), {
+      env: { ...process.env, HOME: temporaryHome, XDG_RUNTIME_DIR: runtime },
+      stdio: "ignore"
+    }).status
+  }
+
+  try {
+    assert.equal(run(""), 6)
+    assert.equal(run(insecureRuntime), 6)
+    assert.equal(fs.existsSync(path.join(insecureRuntime, "crmne.hyprmoncfg.update-check")), false)
+  } finally {
+    fs.rmSync(temporaryHome, { recursive: true, force: true })
+  }
 })
 
 test("action rows keep their cursor positions in step with what is on screen", () => {
