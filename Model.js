@@ -270,6 +270,119 @@ function outputByKey(profile, key) {
   return null
 }
 
+function wrapIndex(index, length) {
+  var count = Math.max(0, Number(length || 0))
+  if (count === 0) return 0
+  var value = Number(index || 0) % count
+  return value < 0 ? value + count : value
+}
+
+function adjacentOutputKey(profile, selectedKey, delta) {
+  var outputs = profile && profile.outputs instanceof Array ? profile.outputs : []
+  if (outputs.length === 0) return ""
+  var current = 0
+  for (var i = 0; i < outputs.length; i++) {
+    if (String((outputs[i] || {}).key || "") === String(selectedKey || "")) {
+      current = i
+      break
+    }
+  }
+  return String((outputs[wrapIndex(current + Number(delta || 0), outputs.length)] || {}).key || "")
+}
+
+function adjacentProfileName(profiles, selectedName, delta) {
+  var items = profiles instanceof Array ? profiles : []
+  if (items.length === 0) return ""
+  var current = 0
+  for (var i = 0; i < items.length; i++) {
+    if (String((items[i] || {}).name || "") === String(selectedName || "")) {
+      current = i
+      break
+    }
+  }
+  return String((items[wrapIndex(current + Number(delta || 0), items.length)] || {}).name || "")
+}
+
+function cycleOptionValue(options, currentValue, delta) {
+  var items = options instanceof Array ? options : []
+  if (items.length === 0) return String(currentValue || "")
+  var current = 0
+  for (var i = 0; i < items.length; i++) {
+    var value = items[i] && typeof items[i] === "object" ? items[i].value : items[i]
+    if (String(value) === String(currentValue || "")) {
+      current = i
+      break
+    }
+  }
+  var selected = items[wrapIndex(current + Number(delta || 0), items.length)]
+  return String(selected && typeof selected === "object" ? selected.value : selected)
+}
+
+// Match the TUI's Alt+arrow placement: use the nearest enabled, non-mirrored
+// output as the anchor, put the selected output flush beside it, and center it
+// on the other axis.
+function snapOutputPosition(profile, selectedKey, direction) {
+  var outputs = profile && profile.outputs instanceof Array ? profile.outputs : []
+  var selectedIndex = -1
+  for (var i = 0; i < outputs.length; i++) {
+    if (String((outputs[i] || {}).key || "") === String(selectedKey || "")) {
+      selectedIndex = i
+      break
+    }
+  }
+  if (selectedIndex < 0) return null
+
+  var selected = outputs[selectedIndex] || {}
+  if (selected.enabled === false || mirrorTarget(selected) !== "") return null
+  var selectedSize = outputLogicalSize(selected)
+  var selectedCenterX = Number(selected.x || 0) * 2 + selectedSize.width
+  var selectedCenterY = Number(selected.y || 0) * 2 + selectedSize.height
+  var anchor = null
+  var nearestDistance = Infinity
+
+  for (var j = 0; j < outputs.length; j++) {
+    var candidate = outputs[j] || {}
+    if (j === selectedIndex || candidate.enabled === false || mirrorTarget(candidate) !== "") continue
+    var candidateSize = outputLogicalSize(candidate)
+    var dx = selectedCenterX - (Number(candidate.x || 0) * 2 + candidateSize.width)
+    var dy = selectedCenterY - (Number(candidate.y || 0) * 2 + candidateSize.height)
+    var distance = dx * dx + dy * dy
+    if (distance < nearestDistance) {
+      nearestDistance = distance
+      anchor = { output: candidate, size: candidateSize }
+    }
+  }
+  if (!anchor) return null
+
+  var anchorX = Number(anchor.output.x || 0)
+  var anchorY = Number(anchor.output.y || 0)
+  if (direction === "left") {
+    return {
+      x: anchorX - selectedSize.width,
+      y: anchorY + Math.trunc((anchor.size.height - selectedSize.height) / 2)
+    }
+  }
+  if (direction === "right") {
+    return {
+      x: anchorX + anchor.size.width,
+      y: anchorY + Math.trunc((anchor.size.height - selectedSize.height) / 2)
+    }
+  }
+  if (direction === "up") {
+    return {
+      x: anchorX + Math.trunc((anchor.size.width - selectedSize.width) / 2),
+      y: anchorY - selectedSize.height
+    }
+  }
+  if (direction === "down") {
+    return {
+      x: anchorX + Math.trunc((anchor.size.width - selectedSize.width) / 2),
+      y: anchorY + anchor.size.height
+    }
+  }
+  return null
+}
+
 function outputName(profile, key) {
   var output = outputByKey(profile, key)
   return output ? String(output.name || key || "Display") : String(key || "Display")
@@ -655,6 +768,11 @@ if (typeof module !== "undefined") {
     profileLayoutDisplays: profileLayoutDisplays,
     hiddenProfileDisplays: hiddenProfileDisplays,
     outputByKey: outputByKey,
+    wrapIndex: wrapIndex,
+    adjacentOutputKey: adjacentOutputKey,
+    adjacentProfileName: adjacentProfileName,
+    cycleOptionValue: cycleOptionValue,
+    snapOutputPosition: snapOutputPosition,
     outputName: outputName,
     outputDisplayLabel: outputDisplayLabel,
     clampBrightness: clampBrightness,

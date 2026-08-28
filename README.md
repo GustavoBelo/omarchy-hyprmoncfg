@@ -34,6 +34,12 @@ A small background service is what watches for this. It catches hotplug, lid and
 - Per-display brightness for the monitor selected on the layout, using Omarchy's own internal-backlight, DDC/CI, and Apple Display support
 - Brightness stays live hardware state rather than being stored in layout profiles, and changes made by Omarchy's panel or brightness keys remain compatible
 
+**Keyboard controls**
+
+- The expanded panel mirrors the TUI shortcuts: `1`/`2`/`3` switch pages, `a` applies, `s` saves, `r` resets, and `?` shows the contextual key guide
+- On the layout, arrows move the selected display; `Shift`, `Ctrl`, and `Alt` preserve the TUI's fine movement and nearest-display snapping
+- Profile browsing and workspace settings use the same arrow, Enter, load, edit, and delete keys as the TUI
+
 **Layout**
 
 - Snap-to-edge arrangement, and the displays beside an output move with it when scale, mode or rotation changes its size

@@ -25,6 +25,7 @@ Item {
   property string deadline: ""
   property int seconds: 0
   property bool saveOnCommit: false
+  property bool draftApply: false
   property bool requestPending: false
   property bool actionPending: false
   property string stage: "idle"
@@ -69,7 +70,7 @@ Item {
     root.targetScreenName = focused ? String(focused.name || "") : ""
   }
 
-  function beginPreview(params, name, save) {
+  function beginPreview(params, name, save, draft) {
     if (root.opened || root.requestPending || root.actionPending) {
       root.errorMessage = "Finish the current display preview first."
       root.requestFinished(false, root.errorMessage)
@@ -84,6 +85,7 @@ Item {
     root.rememberScreen()
     root.profileName = String(name || "Display layout")
     root.saveOnCommit = save === true
+    root.draftApply = draft === true
     root.errorMessage = ""
     root.requestPending = true
     root.stage = "applying"
@@ -102,7 +104,16 @@ Item {
       profile: value,
       timeout_seconds: Math.max(1, Number(timeoutSeconds || 10)),
       save_on_commit: true
-    }, String(value.name || "Display layout"), true)
+    }, String(value.name || "Display layout"), true, true)
+  }
+
+  function startDraftApply(profile, timeoutSeconds) {
+    var value = profile || ({})
+    return root.beginPreview({
+      profile: value,
+      timeout_seconds: Math.max(1, Number(timeoutSeconds || 10)),
+      save_on_commit: false
+    }, String(value.name || "Display layout"), false, true)
   }
 
   function startSavedProfilePreview(name, timeoutSeconds) {
@@ -111,7 +122,7 @@ Item {
     return root.beginPreview({
       profile_name: selected,
       timeout_seconds: Math.max(1, Number(timeoutSeconds || 10))
-    }, selected, false)
+    }, selected, false, false)
   }
 
   function keep() {
@@ -143,6 +154,7 @@ Item {
     root.deadline = ""
     root.seconds = 0
     root.saveOnCommit = false
+    root.draftApply = false
     root.requestPending = false
     root.actionPending = false
     root.stage = "idle"
@@ -317,11 +329,14 @@ Item {
 
           Keys.priority: Keys.BeforeItem
           Keys.onPressed: function(event) {
-            if (root.stage === "confirm" && event.key === Qt.Key_Escape) {
+            if (root.stage === "confirm"
+                && (event.key === Qt.Key_Escape || event.text === "n"
+                  || event.text === "N" || event.text === "q" || event.text === "Q")) {
               root.revert()
               event.accepted = true
             } else if (root.stage === "confirm"
-                && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
+                && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter
+                  || event.text === "y" || event.text === "Y")) {
               root.keep()
               event.accepted = true
             } else if (root.stage === "error" && event.key === Qt.Key_Escape) {
@@ -342,7 +357,8 @@ Item {
                 ? "Applying display preview…"
                 : (root.stage === "error"
                   ? "Couldn’t preview this layout"
-                  : (root.saveOnCommit ? "Keep and save this layout?" : "Keep this profile?"))
+                  : (root.saveOnCommit ? "Keep and save this layout?"
+                    : (root.draftApply ? "Keep this layout?" : "Keep this profile?")))
               color: root.stage === "error" ? Color.urgent : Color.foreground
               font.family: Style.font.family
               font.pixelSize: Style.font.heading

@@ -109,6 +109,56 @@ test("layout preview preserves relative placement", () => {
   assert.equal(right.y, 50)
 })
 
+test("keyboard navigation wraps outputs and profiles like the TUI", () => {
+  const profile = { outputs: [
+    { key: "left" },
+    { key: "right" },
+    { key: "projector" }
+  ] }
+  const profiles = [{ name: "Desk" }, { name: "Laptop" }]
+
+  assert.equal(Model.adjacentOutputKey(profile, "left", -1), "projector")
+  assert.equal(Model.adjacentOutputKey(profile, "projector", 1), "left")
+  assert.equal(Model.adjacentProfileName(profiles, "Desk", -1), "Laptop")
+  assert.equal(Model.adjacentProfileName(profiles, "Laptop", 1), "Desk")
+  assert.equal(Model.cycleOptionValue([
+    { value: "manual" },
+    { value: "sequential" },
+    { value: "interleave" }
+  ], "manual", -1), "interleave")
+})
+
+test("Alt-arrow snapping matches the TUI's nearest-monitor placement", () => {
+  const profile = { outputs: [
+    {
+      key: "selected", enabled: true, width: 2560, height: 1440,
+      scale: 2, transform: 0, x: 2000, y: 300
+    },
+    {
+      key: "near", enabled: true, width: 1920, height: 1080,
+      scale: 1, transform: 0, x: 0, y: 0
+    },
+    {
+      key: "far", enabled: true, width: 3840, height: 2160,
+      scale: 1, transform: 0, x: 7000, y: 0
+    },
+    {
+      key: "mirror", enabled: true, mirror_of: "near", width: 1920,
+      height: 1080, scale: 1, x: 1900, y: 0
+    }
+  ] }
+
+  assert.deepEqual(Model.snapOutputPosition(profile, "selected", "right"), {
+    x: 1920,
+    y: 180
+  })
+  assert.deepEqual(Model.snapOutputPosition(profile, "selected", "up"), {
+    x: 320,
+    y: -720
+  })
+  assert.equal(Model.snapOutputPosition({ outputs: [profile.outputs[0]] }, "selected", "left"), null)
+})
+
 test("editor layout derives logical geometry without losing profile fields", () => {
   const profile = {
     name: "Desk",
@@ -375,6 +425,7 @@ test("display previews keep a shell-level confirmation across monitor rebuilds",
   assert.deepEqual(manifest.kinds, ["bar-widget", "service"])
   assert.equal(manifest.entryPoints.service, "PreviewGuard.qml")
   assert.match(panel, /previewCoordinator\.startDraftPreview/)
+  assert.match(panel, /previewCoordinator\.startDraftApply/)
   assert.match(panel, /previewCoordinator\.startSavedProfilePreview/)
   assert.match(panel, /!root\.previewCoordinator && !root\.opened/)
   assert.match(guard, /root\.stage = "applying"/)
@@ -382,6 +433,31 @@ test("display previews keep a shell-level confirmation across monitor rebuilds",
   assert.match(guard, /WlrKeyboardFocus\.Exclusive/)
   assert.match(guard, /model: root\.opened \? Quickshell\.screens : \[\]/)
   assert.match(guard, /onClicked: function\(mouse\) \{ mouse\.accepted = true \}/)
+  assert.match(guard, /function startDraftApply\(profile, timeoutSeconds\)/)
+  assert.match(guard, /save_on_commit: false/)
+  assert.match(guard, /event\.text === "y"/)
+  assert.match(guard, /event\.text === "n"/)
+})
+
+test("the expanded panel mirrors the TUI's contextual keyboard map", () => {
+  const panel = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
+  const help = fs.readFileSync(path.join(__dirname, "..", "KeyboardHelp.qml"), "utf8")
+
+  assert.match(panel, /onTextKey: function\(text\) \{ if \(root\.expanded\) root\.handleExpandedText\(text\) \}/)
+  assert.match(panel, /root\.activePage = key === "1" \? "layout"/)
+  assert.match(panel, /root\.nudgeSelectedOutput\(dx \* 100, dy \* 100\)/)
+  assert.match(panel, /sequence: "Shift\+Left"/)
+  assert.match(panel, /sequence: "Ctrl\+Left"/)
+  assert.match(panel, /sequence: "Alt\+Left"/)
+  assert.match(panel, /root\.snapSelectedOutput\("left"\)/)
+  assert.match(panel, /sequence: "L"[\s\S]*root\.loadSelectedSavedProfile\(\)/)
+  assert.match(panel, /if \(key === "e"\) root\.beginExecEdit\(\)/)
+  assert.match(panel, /else if \(key === "d"\) root\.deleteSelectedSavedProfile\(\)/)
+  assert.match(panel, /root\.adjustWorkspaceKeyboard\(dx\)/)
+  assert.match(panel, /root\.keyboardHelpOpen = true/)
+  assert.match(help, /Any key closes this\./)
+  assert.match(help, /Tab, Shift\+Tab/)
+  assert.match(help, /Apply the current draft or selected profile/)
 })
 
 test("manual profile choice is explicit and can return to automatic matching", () => {

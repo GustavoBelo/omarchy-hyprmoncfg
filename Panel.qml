@@ -40,6 +40,12 @@ Panel {
   property var pendingContexts: ({})
   property int cursorIndex: 0
   property bool cursorActive: false
+  property bool keyboardHelpOpen: false
+  property string keyboardLayoutPane: "canvas"
+  property int keyboardInspectorField: 0
+  property int workspaceKeyboardIndex: 0
+  property bool execEditing: false
+  property string execDraft: ""
 
   property var editorDocument: ({
     profile: { outputs: [], workspaces: {} },
@@ -230,6 +236,8 @@ Panel {
     { value: "display", label: "Display" },
     { value: "color", label: "Color" }
   ]
+  readonly property var displayKeyboardFields: [0, 1, 2, 5, 6, 7, 8, 9]
+  readonly property var colorKeyboardFields: [3, 4, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
   readonly property var vrrOptions: [
     { value: "0", label: "Off" },
     { value: "1", label: "On" },
@@ -284,6 +292,8 @@ Panel {
   function openFromHotkey() { root.open() }
   function close() {
     if (root.previewTransaction !== "" && !root.previewCoordinator) root.revertPreview()
+    root.keyboardHelpOpen = false
+    root.execEditing = false
     root.controller.hide()
   }
 
@@ -497,6 +507,210 @@ Panel {
     root.editWorkspaces({ monitor_order: order })
   }
 
+  function selectOutput(delta) {
+    var next = Model.adjacentOutputKey(root.draftProfile, root.selectedOutputKey, delta)
+    if (next !== "") root.selectedOutputKey = next
+  }
+
+  function nudgeSelectedOutput(dx, dy) {
+    var output = root.selectedOutput
+    if (!output || !root.managedChecked || root.editPending || root.previewTransaction !== "") return
+    if (String(output.mirror_of || "") !== "") {
+      root.lastError = String(output.name || "This display") + " mirrors another display and follows it."
+      return
+    }
+    root.editOutput({
+      x: Number(output.x || 0) + Number(dx || 0),
+      y: Number(output.y || 0) + Number(dy || 0)
+    })
+  }
+
+  function snapSelectedOutput(direction) {
+    if (!root.managedChecked || root.editPending || root.previewTransaction !== "") return
+    var position = Model.snapOutputPosition(root.draftProfile, root.selectedOutputKey, direction)
+    if (!position) {
+      root.lastError = "No other enabled display is available for snapping."
+      return
+    }
+    root.editOutput({ x: position.x, y: position.y })
+  }
+
+  function cycleLayoutKeyboardPane(direction) {
+    var panes = ["canvas", "display", "color"]
+    var current = panes.indexOf(root.keyboardLayoutPane)
+    root.keyboardLayoutPane = panes[Model.wrapIndex(current + direction, panes.length)]
+    if (root.keyboardLayoutPane !== "canvas") {
+      root.inspectorPage = root.keyboardLayoutPane
+      var fields = root.keyboardLayoutPane === "display"
+        ? root.displayKeyboardFields : root.colorKeyboardFields
+      if (fields.indexOf(root.keyboardInspectorField) < 0)
+        root.keyboardInspectorField = fields[0]
+    }
+  }
+
+  function moveInspectorCursor(delta) {
+    var fields = root.inspectorPage === "display"
+      ? root.displayKeyboardFields : root.colorKeyboardFields
+    var current = fields.indexOf(root.keyboardInspectorField)
+    root.keyboardInspectorField = fields[Model.wrapIndex(current + delta, fields.length)]
+  }
+
+  function inspectorHasCursor(field) {
+    return root.expanded && root.activePage === "layout"
+      && root.keyboardLayoutPane !== "canvas"
+      && root.keyboardInspectorField === field
+  }
+
+  function bounded(value, minimum, maximum) {
+    return Math.max(minimum, Math.min(maximum, value))
+  }
+
+  function adjustInspectorField(delta) {
+    var output = root.selectedOutput
+    if (!output || !root.managedChecked || root.editPending || root.previewTransaction !== "") return
+    var field = root.keyboardInspectorField
+    var edit = ({})
+    if (field === 0) edit.enabled = output.enabled === false
+    else if (field === 1) edit.mode = Model.cycleOptionValue(
+      Model.modeOptions(root.editorDocument.displays, root.selectedOutputKey), Model.outputMode(output), delta)
+    else if (field === 2) edit.scale = root.bounded(Number(output.scale || 1) + delta * 0.05, 0.25, 4)
+    else if (field === 3) edit.bitdepth = Number(Model.cycleOptionValue(root.bitdepthOptions,
+      String(output.bitdepth || 8), delta))
+    else if (field === 4) edit.cm = Model.cycleOptionValue(root.colorManagementOptions,
+      String(output.cm || "srgb"), delta)
+    else if (field === 5) edit.vrr = Number(Model.cycleOptionValue(root.vrrOptions,
+      String(output.vrr || 0), delta))
+    else if (field === 6) edit.transform = Number(Model.cycleOptionValue(root.transformOptions,
+      String(output.transform || 0), delta))
+    else if (field === 7) edit.x = Number(output.x || 0) + delta * 10
+    else if (field === 8) edit.y = Number(output.y || 0) + delta * 10
+    else if (field === 9) edit.mirror_of = Model.cycleOptionValue(
+      Model.mirrorOptions(root.draftProfile, root.selectedOutputKey), String(output.mirror_of || ""), delta)
+    else if (field === 10) edit.sdr_brightness = root.bounded(Number(output.sdr_brightness || 0) + delta * 0.05, 0, 3)
+    else if (field === 11) edit.sdr_saturation = root.bounded(Number(output.sdr_saturation || 0) + delta * 0.05, 0, 3)
+    else if (field === 12) edit.sdr_min_luminance = root.bounded(Number(output.sdr_min_luminance || 0) + delta * 0.005, 0, 1)
+    else if (field === 13) edit.sdr_max_luminance = root.bounded(Number(output.sdr_max_luminance || 0) + delta * 10, 0, 1000)
+    else if (field === 14) edit.sdr_eotf = Model.cycleOptionValue(sdrCurveDropdown.options,
+      String(output.sdr_eotf || "default"), delta)
+    else if (field === 15) edit.min_luminance = root.bounded(Number(output.min_luminance || 0) + delta * 0.001, 0, 1000)
+    else if (field === 16) edit.max_luminance = root.bounded(Number(output.max_luminance || 0) + delta * 10, 0, 2000)
+    else if (field === 17) edit.max_avg_luminance = root.bounded(Number(output.max_avg_luminance || 0) + delta * 10, 0, 2000)
+    else if (field === 18) edit.supports_wide_color = Number(Model.cycleOptionValue(root.triStateOptions,
+      String(output.supports_wide_color || 0), delta))
+    else if (field === 19) edit.supports_hdr = Number(Model.cycleOptionValue(root.triStateOptions,
+      String(output.supports_hdr || 0), delta))
+    else return
+    root.editOutput(edit)
+  }
+
+  function activateInspectorField() {
+    if (!root.selectedOutput || !root.managedChecked || root.editPending) return
+    var field = root.keyboardInspectorField
+    if (field === 0) root.adjustInspectorField(1)
+    else if (field === 1) modeDropdown.open()
+    else if (field === 2) scaleDropdown.open()
+    else if (field === 3) bitdepthDropdown.open()
+    else if (field === 4) colorManagementDropdown.open()
+    else if (field === 5) vrrDropdown.open()
+    else if (field === 6) rotationDropdown.open()
+    else if (field === 7) positionXField.field.forceActiveFocus()
+    else if (field === 8) positionYField.field.forceActiveFocus()
+    else if (field === 9) mirrorDropdown.open()
+    else if (field === 10) sdrBrightnessField.input.forceActiveFocus()
+    else if (field === 11) sdrSaturationField.input.forceActiveFocus()
+    else if (field === 12) sdrMinLuminanceField.input.forceActiveFocus()
+    else if (field === 13) sdrMaxLuminanceField.input.forceActiveFocus()
+    else if (field === 14) sdrCurveDropdown.open()
+    else if (field === 15) minLuminanceField.input.forceActiveFocus()
+    else if (field === 16) maxLuminanceField.input.forceActiveFocus()
+    else if (field === 17) maxAvgLuminanceField.input.forceActiveFocus()
+    else if (field === 18) forceWideDropdown.open()
+    else if (field === 19) forceHdrDropdown.open()
+    else if (field === 20) iccProfileInput.forceActiveFocus()
+  }
+
+  function selectSavedProfile(delta) {
+    var profiles = root.editorDocument && root.editorDocument.profiles instanceof Array
+      ? root.editorDocument.profiles : []
+    var selected = Model.adjacentProfileName(profiles, root.selectedSavedProfileName, delta)
+    if (selected !== "") root.selectedSavedProfileName = selected
+  }
+
+  function loadSelectedSavedProfile() {
+    if (!root.selectedSavedProfile) return
+    root.draftProfile = Model.clone(root.selectedSavedProfile)
+    root.workspacePlan = Model.clone(root.selectedSavedWorkspacePlan) || []
+    root.sourceProfile = root.selectedSavedProfileName
+    root.saveName = root.selectedSavedProfileName
+    root.selectedOutputKey = Model.initialOutputKey(root.draftProfile, root.editorDocument.displays)
+    root.draftDirty = true
+    root.creatingProfile = false
+    root.activePage = "layout"
+    root.keyboardLayoutPane = "canvas"
+    root.lastError = ""
+  }
+
+  function deleteSelectedSavedProfile() {
+    var name = String(root.selectedSavedProfileName || "")
+    if (name === "" || root.previewTransaction !== "") return
+    root.lastError = ""
+    root.send("delete", { name: name }, { name: name })
+  }
+
+  function beginExecEdit() {
+    if (!root.selectedSavedProfile) return
+    root.execDraft = String(root.selectedSavedProfile.exec || "")
+    root.execEditing = true
+    Qt.callLater(function() { profileExecInput.forceActiveFocus() })
+  }
+
+  function commitExecEdit() {
+    if (!root.selectedSavedProfile) {
+      root.execEditing = false
+      return
+    }
+    var profile = Model.clone(root.selectedSavedProfile)
+    profile.exec = String(root.execDraft || "").trim()
+    root.execEditing = false
+    root.send("save", { profile: profile }, { kind: "exec", name: profile.name })
+    Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+  }
+
+  function workspaceKeyboardCount() {
+    var order = ((root.draftProfile || {}).workspaces || {}).monitor_order || []
+    return 4 + order.length
+  }
+
+  function moveWorkspaceCursor(delta) {
+    root.workspaceKeyboardIndex = Model.wrapIndex(
+      root.workspaceKeyboardIndex + delta, root.workspaceKeyboardCount())
+  }
+
+  function adjustWorkspaceKeyboard(delta) {
+    if (!root.managedChecked || root.editPending || root.previewTransaction !== "") return
+    var settings = Model.clone((root.draftProfile || {}).workspaces || {}) || {}
+    var index = root.workspaceKeyboardIndex
+    if (index === 0) root.editWorkspaces({ enabled: !settings.enabled })
+    else if (index === 1) root.editWorkspaces({
+      strategy: Model.cycleOptionValue(["manual", "sequential", "interleave"],
+        String(settings.strategy || "manual"), delta)
+    })
+    else if (index === 2) root.editWorkspaces({
+      max_workspaces: root.bounded(Number(settings.max_workspaces || 9) + delta, 1, 30)
+    })
+    else if (index === 3) root.editWorkspaces({
+      group_size: root.bounded(Number(settings.group_size || 3) + delta, 1, 10)
+    })
+    else {
+      var order = settings.monitor_order instanceof Array ? settings.monitor_order : []
+      var orderIndex = index - 4
+      var target = orderIndex + delta
+      if (orderIndex < 0 || orderIndex >= order.length || target < 0 || target >= order.length) return
+      root.moveWorkspaceMonitor(String(order[orderIndex] || ""), delta)
+      root.workspaceKeyboardIndex = 4 + target
+    }
+  }
+
   function draftName() {
     return root.sourceProfile !== "" ? root.sourceProfile : String(root.saveName || "").trim()
   }
@@ -525,6 +739,146 @@ Panel {
       timeout_seconds: 10,
       save_on_commit: true
     }, { kind: "draft" })
+  }
+
+  function applyDraft() {
+    if (!root.managedChecked || root.previewTransaction !== "" || root.previewPending) return
+    var name = root.draftName() || "draft"
+    var profile = Model.namedProfile(root.draftProfile, name)
+    root.lastError = ""
+    root.previewPending = true
+    if (root.previewCoordinator
+        && typeof root.previewCoordinator.startDraftApply === "function") {
+      if (!root.previewCoordinator.startDraftApply(profile, 10)) {
+        root.previewPending = false
+        root.lastError = String(root.previewCoordinator.errorMessage
+          || "Could not open the display confirmation.")
+      }
+      return
+    }
+    root.send("preview", {
+      profile: profile,
+      timeout_seconds: 10,
+      save_on_commit: false
+    }, { kind: "draft-apply" })
+  }
+
+  function keyboardSaveDraft() {
+    if (root.draftName() !== "") {
+      root.previewDraft()
+      return
+    }
+    root.creatingProfile = true
+    root.saveName = ""
+    Qt.callLater(function() { profileNameInput.forceActiveFocus() })
+  }
+
+  function handleExpandedMove(dx, dy) {
+    if (root.keyboardHelpOpen) {
+      root.keyboardHelpOpen = false
+      return
+    }
+    if (root.previewTransaction !== "") return
+    if (root.activePage === "layout") {
+      if (root.keyboardLayoutPane === "canvas") root.nudgeSelectedOutput(dx * 100, dy * 100)
+      else if (dy !== 0) root.moveInspectorCursor(dy)
+      else if (dx !== 0) root.adjustInspectorField(dx)
+    } else if (root.activePage === "profiles") {
+      if (dy !== 0) root.selectSavedProfile(dy)
+    } else if (root.activePage === "workspaces") {
+      if (dy !== 0) root.moveWorkspaceCursor(dy)
+      else if (dx !== 0) root.adjustWorkspaceKeyboard(dx)
+    }
+  }
+
+  function handleExpandedActivate(returnPressed) {
+    if (root.keyboardHelpOpen) {
+      root.keyboardHelpOpen = false
+      return
+    }
+    if (root.previewTransaction !== "") {
+      root.keepPreview()
+      return
+    }
+    if (root.activePage === "layout") {
+      if (root.keyboardLayoutPane === "canvas") {
+        if (returnPressed) root.cycleLayoutKeyboardPane(1)
+        else if (root.selectedOutput) root.editOutput({ enabled: root.selectedOutput.enabled === false })
+      } else root.activateInspectorField()
+    } else if (root.activePage === "profiles") {
+      if (returnPressed) root.activateSelectedSavedProfile()
+      else root.setProfileAutomatic(!root.profileAutomatic)
+    } else if (root.activePage === "workspaces") {
+      root.adjustWorkspaceKeyboard(1)
+    }
+  }
+
+  function handleExpandedTab(direction) {
+    if (root.keyboardHelpOpen) {
+      root.keyboardHelpOpen = false
+      return
+    }
+    if (root.activePage === "layout") root.cycleLayoutKeyboardPane(direction)
+  }
+
+  function handleExpandedText(text) {
+    var key = String(text || "")
+    if (root.keyboardHelpOpen) {
+      root.keyboardHelpOpen = false
+      return
+    }
+    if (root.previewTransaction !== "") {
+      if (key === "y" || key === "Y") root.keepPreview()
+      else if (key === "n" || key === "N") root.revertPreview()
+      return
+    }
+    if (key === "1" || key === "2" || key === "3") {
+      root.activePage = key === "1" ? "layout" : (key === "2" ? "profiles" : "workspaces")
+      return
+    }
+    if (key === "?") {
+      root.keyboardHelpOpen = true
+      return
+    }
+    if (key === "q") {
+      root.close()
+      return
+    }
+    if (key === "R") {
+      if (root.daemonOutdated) root.restartService()
+      return
+    }
+    if (key === "r") {
+      root.requestEditorState()
+      return
+    }
+    if (key === "s") {
+      root.keyboardSaveDraft()
+      return
+    }
+    if (key === "a") {
+      if (root.activePage === "profiles") root.activateSelectedSavedProfile()
+      else root.applyDraft()
+      return
+    }
+
+    if (root.activePage === "layout") {
+      if (key === "0") root.editOutput({ x: 0, y: 0 })
+      else if (key === "[") root.selectOutput(-1)
+      else if (key === "]") root.selectOutput(1)
+      else if (root.keyboardLayoutPane === "canvas" && key === "H") root.nudgeSelectedOutput(-500, 0)
+      else if (root.keyboardLayoutPane === "canvas" && key === "L") root.nudgeSelectedOutput(500, 0)
+      else if (root.keyboardLayoutPane === "canvas" && key === "K") root.nudgeSelectedOutput(0, -500)
+      else if (root.keyboardLayoutPane === "canvas" && key === "J") root.nudgeSelectedOutput(0, 500)
+      else if (root.keyboardLayoutPane !== "canvas" && (key === "-" || key === "_")) root.adjustInspectorField(-1)
+      else if (root.keyboardLayoutPane !== "canvas" && (key === "+" || key === "=")) root.adjustInspectorField(1)
+    } else if (root.activePage === "profiles") {
+      if (key === "e") root.beginExecEdit()
+      else if (key === "d") root.deleteSelectedSavedProfile()
+    } else if (root.activePage === "workspaces") {
+      if (key === "-" || key === "_") root.adjustWorkspaceKeyboard(-1)
+      else if (key === "+" || key === "=") root.adjustWorkspaceKeyboard(1)
+    }
   }
 
   function previewProfile(name) {
@@ -710,6 +1064,8 @@ Panel {
       root.clearPreview(true)
     } else if (method === "set_profile_auto") {
       root.profileModePending = false
+    } else if (method === "save" || method === "delete") {
+      root.requestEditorState()
     }
   }
 
@@ -807,6 +1163,9 @@ Panel {
     if (opened) {
       root.cursorIndex = 0
       root.cursorActive = false
+      root.keyboardLayoutPane = "canvas"
+      root.keyboardInspectorField = 0
+      root.workspaceKeyboardIndex = 0
       root.checkInstallation()
       root.checkPluginUpdate()
       if (root.compatible) root.checkServiceState()
@@ -1148,15 +1507,127 @@ Panel {
       ? panel.fittedContentHeight(Style.space(780))
       : panel.fittedContentHeight(compactColumn.implicitHeight)
 
+    Item {
+      width: 0
+      height: 0
+
+      Shortcut {
+        sequence: "Shift+Left"
+        enabled: root.opened && root.expanded && root.activePage === "layout"
+          && root.keyboardLayoutPane === "canvas" && !root.keyboardHelpOpen && !root.execEditing && !keyCatcher.blocked
+        onActivated: root.nudgeSelectedOutput(-10, 0)
+      }
+      Shortcut {
+        sequence: "Shift+Right"
+        enabled: root.opened && root.expanded && root.activePage === "layout"
+          && root.keyboardLayoutPane === "canvas" && !root.keyboardHelpOpen && !root.execEditing && !keyCatcher.blocked
+        onActivated: root.nudgeSelectedOutput(10, 0)
+      }
+      Shortcut {
+        sequence: "Shift+Up"
+        enabled: root.opened && root.expanded && root.activePage === "layout"
+          && root.keyboardLayoutPane === "canvas" && !root.keyboardHelpOpen && !root.execEditing && !keyCatcher.blocked
+        onActivated: root.nudgeSelectedOutput(0, -10)
+      }
+      Shortcut {
+        sequence: "Shift+Down"
+        enabled: root.opened && root.expanded && root.activePage === "layout"
+          && root.keyboardLayoutPane === "canvas" && !root.keyboardHelpOpen && !root.execEditing && !keyCatcher.blocked
+        onActivated: root.nudgeSelectedOutput(0, 10)
+      }
+      Shortcut {
+        sequence: "Ctrl+Left"
+        enabled: root.opened && root.expanded && root.activePage === "layout"
+          && root.keyboardLayoutPane === "canvas" && !root.keyboardHelpOpen && !root.execEditing && !keyCatcher.blocked
+        onActivated: root.nudgeSelectedOutput(-1, 0)
+      }
+      Shortcut {
+        sequence: "Ctrl+Right"
+        enabled: root.opened && root.expanded && root.activePage === "layout"
+          && root.keyboardLayoutPane === "canvas" && !root.keyboardHelpOpen && !root.execEditing && !keyCatcher.blocked
+        onActivated: root.nudgeSelectedOutput(1, 0)
+      }
+      Shortcut {
+        sequence: "Ctrl+Up"
+        enabled: root.opened && root.expanded && root.activePage === "layout"
+          && root.keyboardLayoutPane === "canvas" && !root.keyboardHelpOpen && !root.execEditing && !keyCatcher.blocked
+        onActivated: root.nudgeSelectedOutput(0, -1)
+      }
+      Shortcut {
+        sequence: "Ctrl+Down"
+        enabled: root.opened && root.expanded && root.activePage === "layout"
+          && root.keyboardLayoutPane === "canvas" && !root.keyboardHelpOpen && !root.execEditing && !keyCatcher.blocked
+        onActivated: root.nudgeSelectedOutput(0, 1)
+      }
+      Shortcut {
+        sequence: "Alt+Left"
+        enabled: root.opened && root.expanded && root.activePage === "layout"
+          && root.keyboardLayoutPane === "canvas" && !root.keyboardHelpOpen && !root.execEditing && !keyCatcher.blocked
+        onActivated: root.snapSelectedOutput("left")
+      }
+      Shortcut {
+        sequence: "Alt+Right"
+        enabled: root.opened && root.expanded && root.activePage === "layout"
+          && root.keyboardLayoutPane === "canvas" && !root.keyboardHelpOpen && !root.execEditing && !keyCatcher.blocked
+        onActivated: root.snapSelectedOutput("right")
+      }
+      Shortcut {
+        sequence: "Alt+Up"
+        enabled: root.opened && root.expanded && root.activePage === "layout"
+          && root.keyboardLayoutPane === "canvas" && !root.keyboardHelpOpen && !root.execEditing && !keyCatcher.blocked
+        onActivated: root.snapSelectedOutput("up")
+      }
+      Shortcut {
+        sequence: "Alt+Down"
+        enabled: root.opened && root.expanded && root.activePage === "layout"
+          && root.keyboardLayoutPane === "canvas" && !root.keyboardHelpOpen && !root.execEditing && !keyCatcher.blocked
+        onActivated: root.snapSelectedOutput("down")
+      }
+      Shortcut {
+        sequence: "L"
+        enabled: root.opened && root.expanded && root.activePage === "profiles"
+          && !root.keyboardHelpOpen && !root.execEditing && !keyCatcher.blocked
+        onActivated: root.loadSelectedSavedProfile()
+      }
+    }
+
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      onMoveRequested: function(dx, dy) { if (!root.expanded && dy !== 0) root.moveCursor(dy) }
+      property bool returnPressed: false
+      blocked: root.execEditing
+        || profileNameInput.activeFocus
+        || positionXField.field.activeFocus || positionYField.field.activeFocus
+        || workspaceCountField.field.activeFocus || workspaceGroupSizeField.field.activeFocus
+        || sdrBrightnessField.input.activeFocus || sdrSaturationField.input.activeFocus
+        || sdrMinLuminanceField.input.activeFocus || sdrMaxLuminanceField.input.activeFocus
+        || minLuminanceField.input.activeFocus || maxLuminanceField.input.activeFocus
+        || maxAvgLuminanceField.input.activeFocus || iccProfileInput.activeFocus
+        || modeDropdown.popupOpen || scaleDropdown.popupOpen || vrrDropdown.popupOpen
+        || rotationDropdown.popupOpen || mirrorDropdown.popupOpen
+        || bitdepthDropdown.popupOpen || colorManagementDropdown.popupOpen
+        || sdrCurveDropdown.popupOpen || forceWideDropdown.popupOpen || forceHdrDropdown.popupOpen
+        || workspaceStrategyDropdown.popupOpen
+      onMoveRequested: function(dx, dy) {
+        if (!root.expanded && dy !== 0) root.moveCursor(dy)
+        else if (root.expanded) root.handleExpandedMove(dx, dy)
+      }
+      onReturnRequested: returnPressed = true
       onActivateRequested: {
         if (!root.expanded) root.activateCursor()
+        else root.handleExpandedActivate(returnPressed)
+        returnPressed = false
       }
-      onCloseRequested: root.close()
-      onTabRequested: function(direction) { root.switchPanel(direction) }
+      onCloseRequested: {
+        if (root.keyboardHelpOpen) root.keyboardHelpOpen = false
+        else if (root.previewTransaction !== "") root.revertPreview()
+        else root.close()
+      }
+      onTabRequested: function(direction) {
+        if (root.expanded) root.handleExpandedTab(direction)
+        else root.switchPanel(direction)
+      }
+      onTextKey: function(text) { if (root.expanded) root.handleExpandedText(text) }
 
       Column {
         id: compactColumn
@@ -1619,6 +2090,44 @@ Panel {
             }
 
             Button {
+              id: keyboardHelpButton
+              text: ""
+              bordered: true
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              fontSize: Style.font.caption
+              implicitWidth: keyboardHelpButtonContent.implicitWidth
+                + horizontalPadding * 2 + Style.normalBorderWidth * 2
+              implicitHeight: compactButton.implicitHeight
+
+              Row {
+                id: keyboardHelpButtonContent
+                anchors.centerIn: parent
+                spacing: Style.space(4)
+
+                Text {
+                  anchors.verticalCenter: parent.verticalCenter
+                  anchors.verticalCenterOffset: 1
+                  text: "?"
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                }
+
+                Text {
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: "Keys"
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                }
+              }
+
+              onClicked: root.keyboardHelpOpen = true
+            }
+
+            Button {
+              id: compactButton
               text: "Compact"
               iconText: "󰊔"
               bordered: true
@@ -1725,7 +2234,7 @@ Panel {
               width: Math.round(parent.width * 0.65)
               title: "Monitor Layout"
               meta: root.hiddenDisplays
-              active: true
+              active: root.keyboardLayoutPane === "canvas"
               foreground: root.foreground
               dim: root.dim
               accent: Color.accent
@@ -1764,6 +2273,7 @@ Panel {
               spacing: Style.space(10)
 
               EditorPane {
+                id: inspectorPane
                 width: parent.width
                 height: Style.space(185)
                 title: "Info"
@@ -1822,7 +2332,7 @@ Panel {
                 width: parent.width
                 height: parent.height - Style.space(195)
                 title: "Display  -  Color"
-                active: true
+                active: root.keyboardLayoutPane !== "canvas"
                 foreground: root.foreground
                 dim: root.dim
                 accent: Color.accent
@@ -1839,7 +2349,10 @@ Panel {
                   accent: Color.accent
                   fontFamily: root.fontFamily
                   fontSize: Style.font.caption
-                  onChanged: function(value) { root.inspectorPage = value }
+                  onChanged: function(value) {
+                    root.inspectorPage = value
+                    root.keyboardLayoutPane = value
+                  }
                 }
 
                 Column {
@@ -1877,6 +2390,7 @@ Panel {
                   }
 
                   Toggle {
+                    id: displayEnabledToggle
                     width: parent.width
                     label: "Enabled"
                     description: checked ? "This display participates in the layout" : "Saved as off"
@@ -1884,6 +2398,7 @@ Panel {
                     enabled: root.managedChecked && !!root.selectedOutput && !root.editPending
                       && (checked ? Model.enabledOutputCount(root.draftProfile) > 1 : true)
                     opacity: root.managedChecked ? 1.0 : root.unmanagedOpacity
+                    hasCursor: root.inspectorHasCursor(0)
                     foreground: root.foreground
                     fontFamily: root.fontFamily
                     onClicked: root.editOutput({ enabled: !checked })
@@ -1898,6 +2413,7 @@ Panel {
                     readonly property real cellWidth: (width - spacing) / 2
 
                     PanelDropdown {
+                      id: modeDropdown
                       popupParent: keyCatcher
                       ownerOpen: root.opened && root.expanded
                       width: parent.cellWidth
@@ -1905,12 +2421,14 @@ Panel {
                       options: Model.modeOptions(root.editorDocument.displays, root.selectedOutputKey)
                       value: root.selectedOutput ? Model.outputMode(root.selectedOutput) : ""
                       enabled: !!root.selectedOutput && !root.editPending
+                      hasCursor: root.inspectorHasCursor(1)
                       foreground: root.foreground
                       fontFamily: root.fontFamily
                       onChanged: function(value) { root.editOutput({ mode: value }) }
                     }
 
                     PanelDropdown {
+                      id: scaleDropdown
                       popupParent: keyCatcher
                       ownerOpen: root.opened && root.expanded
                       width: parent.cellWidth
@@ -1919,12 +2437,14 @@ Panel {
                         root.selectedOutput ? root.selectedOutput.scale : 1)
                       value: root.selectedOutput ? Model.formatScale(root.selectedOutput.scale) : "1"
                       enabled: !!root.selectedOutput && !root.editPending
+                      hasCursor: root.inspectorHasCursor(2)
                       foreground: root.foreground
                       fontFamily: root.fontFamily
                       onChanged: function(value) { root.editOutput({ scale: Number(value) }) }
                     }
 
                     PanelDropdown {
+                      id: vrrDropdown
                       popupParent: keyCatcher
                       ownerOpen: root.opened && root.expanded
                       width: parent.cellWidth
@@ -1932,12 +2452,14 @@ Panel {
                       options: root.vrrOptions
                       value: root.selectedOutput ? String(root.selectedOutput.vrr || 0) : "0"
                       enabled: !!root.selectedOutput && !root.editPending
+                      hasCursor: root.inspectorHasCursor(5)
                       foreground: root.foreground
                       fontFamily: root.fontFamily
                       onChanged: function(value) { root.editOutput({ vrr: Number(value) }) }
                     }
 
                     PanelDropdown {
+                      id: rotationDropdown
                       popupParent: keyCatcher
                       ownerOpen: root.opened && root.expanded
                       width: parent.cellWidth
@@ -1945,12 +2467,14 @@ Panel {
                       options: root.transformOptions
                       value: root.selectedOutput ? String(root.selectedOutput.transform || 0) : "0"
                       enabled: !!root.selectedOutput && !root.editPending
+                      hasCursor: root.inspectorHasCursor(6)
                       foreground: root.foreground
                       fontFamily: root.fontFamily
                       onChanged: function(value) { root.editOutput({ transform: Number(value) }) }
                     }
 
                     NumberField {
+                      id: positionXField
                       width: parent.cellWidth
                       fieldWidth: width
                       label: "POSITION X"
@@ -1958,12 +2482,17 @@ Panel {
                       to: 20000
                       value: root.selectedOutput ? Number(root.selectedOutput.x || 0) : 0
                       enabled: !!root.selectedOutput && !root.editPending
+                      hasCursor: root.inspectorHasCursor(7)
                       foreground: root.foreground
                       fontFamily: root.fontFamily
-                      onModified: function(value) { root.editOutput({ x: value }) }
+                      onModified: function(value) {
+                        root.editOutput({ x: value })
+                        Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+                      }
                     }
 
                     NumberField {
+                      id: positionYField
                       width: parent.cellWidth
                       fieldWidth: width
                       label: "POSITION Y"
@@ -1971,13 +2500,18 @@ Panel {
                       to: 20000
                       value: root.selectedOutput ? Number(root.selectedOutput.y || 0) : 0
                       enabled: !!root.selectedOutput && !root.editPending
+                      hasCursor: root.inspectorHasCursor(8)
                       foreground: root.foreground
                       fontFamily: root.fontFamily
-                      onModified: function(value) { root.editOutput({ y: value }) }
+                      onModified: function(value) {
+                        root.editOutput({ y: value })
+                        Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+                      }
                     }
                   }
 
                   PanelDropdown {
+                    id: mirrorDropdown
                     popupParent: keyCatcher
                     ownerOpen: root.opened && root.expanded
                     width: parent.width
@@ -1985,6 +2519,7 @@ Panel {
                     options: Model.mirrorOptions(root.draftProfile, root.selectedOutputKey)
                     value: root.selectedOutput ? String(root.selectedOutput.mirror_of || "") : ""
                     enabled: root.managedChecked && !!root.selectedOutput && !root.editPending
+                    hasCursor: root.inspectorHasCursor(9)
                     opacity: root.managedChecked ? 1.0 : root.unmanagedOpacity
                     foreground: root.foreground
                     fontFamily: root.fontFamily
@@ -2009,6 +2544,7 @@ Panel {
                     readonly property real cellWidth: (width - spacing) / 2
 
                     PanelDropdown {
+                      id: bitdepthDropdown
                       popupParent: keyCatcher
                       ownerOpen: root.opened && root.expanded
                       width: parent.cellWidth
@@ -2016,12 +2552,14 @@ Panel {
                       options: root.bitdepthOptions
                       value: root.selectedOutput ? String(root.selectedOutput.bitdepth || 8) : "8"
                       enabled: !!root.selectedOutput && !root.editPending
+                      hasCursor: root.inspectorHasCursor(3)
                       foreground: root.foreground
                       fontFamily: root.fontFamily
                       onChanged: function(value) { root.editOutput({ bitdepth: Number(value) }) }
                     }
 
                     PanelDropdown {
+                      id: colorManagementDropdown
                       popupParent: keyCatcher
                       ownerOpen: root.opened && root.expanded
                       width: parent.cellWidth
@@ -2030,48 +2568,58 @@ Panel {
                       value: root.selectedOutput && String(root.selectedOutput.cm || "") !== ""
                         ? String(root.selectedOutput.cm) : "srgb"
                       enabled: !!root.selectedOutput && !root.editPending
+                      hasCursor: root.inspectorHasCursor(4)
                       foreground: root.foreground
                       fontFamily: root.fontFamily
                       onChanged: function(value) { root.editOutput({ cm: value }) }
                     }
 
                     DecimalField {
+                      id: sdrBrightnessField
                       width: parent.cellWidth
                       label: "SDR BRIGHTNESS"
                       value: root.selectedOutput ? Number(root.selectedOutput.sdr_brightness || 0) : 0
                       decimals: 2
                       enabled: !!root.selectedOutput && !root.editPending
+                      hasCursor: root.inspectorHasCursor(10)
                       onModified: function(value) { root.editOutput({ sdr_brightness: value }) }
                     }
 
                     DecimalField {
+                      id: sdrSaturationField
                       width: parent.cellWidth
                       label: "SDR SATURATION"
                       value: root.selectedOutput ? Number(root.selectedOutput.sdr_saturation || 0) : 0
                       decimals: 2
                       enabled: !!root.selectedOutput && !root.editPending
+                      hasCursor: root.inspectorHasCursor(11)
                       onModified: function(value) { root.editOutput({ sdr_saturation: value }) }
                     }
 
                     DecimalField {
+                      id: sdrMinLuminanceField
                       width: parent.cellWidth
                       label: "SDR MIN LUMINANCE"
                       value: root.selectedOutput ? Number(root.selectedOutput.sdr_min_luminance || 0) : 0
                       decimals: 3
                       enabled: !!root.selectedOutput && !root.editPending
+                      hasCursor: root.inspectorHasCursor(12)
                       onModified: function(value) { root.editOutput({ sdr_min_luminance: value }) }
                     }
 
                     DecimalField {
+                      id: sdrMaxLuminanceField
                       width: parent.cellWidth
                       label: "SDR MAX LUMINANCE"
                       value: root.selectedOutput ? Number(root.selectedOutput.sdr_max_luminance || 0) : 0
                       decimals: 0
                       enabled: !!root.selectedOutput && !root.editPending
+                      hasCursor: root.inspectorHasCursor(13)
                       onModified: function(value) { root.editOutput({ sdr_max_luminance: Math.round(value) }) }
                     }
 
                     PanelDropdown {
+                      id: sdrCurveDropdown
                       popupParent: keyCatcher
                       ownerOpen: root.opened && root.expanded
                       width: parent.cellWidth
@@ -2084,39 +2632,47 @@ Panel {
                       value: root.selectedOutput && String(root.selectedOutput.sdr_eotf || "") !== ""
                         ? String(root.selectedOutput.sdr_eotf) : "default"
                       enabled: !!root.selectedOutput && !root.editPending
+                      hasCursor: root.inspectorHasCursor(14)
                       foreground: root.foreground
                       fontFamily: root.fontFamily
                       onChanged: function(value) { root.editOutput({ sdr_eotf: value }) }
                     }
 
                     DecimalField {
+                      id: minLuminanceField
                       width: parent.cellWidth
                       label: "MIN LUMINANCE"
                       value: root.selectedOutput ? Number(root.selectedOutput.min_luminance || 0) : 0
                       decimals: 3
                       enabled: !!root.selectedOutput && !root.editPending
+                      hasCursor: root.inspectorHasCursor(15)
                       onModified: function(value) { root.editOutput({ min_luminance: value }) }
                     }
 
                     DecimalField {
+                      id: maxLuminanceField
                       width: parent.cellWidth
                       label: "MAX LUMINANCE"
                       value: root.selectedOutput ? Number(root.selectedOutput.max_luminance || 0) : 0
                       decimals: 0
                       enabled: !!root.selectedOutput && !root.editPending
+                      hasCursor: root.inspectorHasCursor(16)
                       onModified: function(value) { root.editOutput({ max_luminance: Math.round(value) }) }
                     }
 
                     DecimalField {
+                      id: maxAvgLuminanceField
                       width: parent.cellWidth
                       label: "MAX AVG LUMINANCE"
                       value: root.selectedOutput ? Number(root.selectedOutput.max_avg_luminance || 0) : 0
                       decimals: 0
                       enabled: !!root.selectedOutput && !root.editPending
+                      hasCursor: root.inspectorHasCursor(17)
                       onModified: function(value) { root.editOutput({ max_avg_luminance: Math.round(value) }) }
                     }
 
                     PanelDropdown {
+                      id: forceWideDropdown
                       popupParent: keyCatcher
                       ownerOpen: root.opened && root.expanded
                       width: parent.cellWidth
@@ -2124,12 +2680,14 @@ Panel {
                       options: root.triStateOptions
                       value: root.selectedOutput ? String(root.selectedOutput.supports_wide_color || 0) : "0"
                       enabled: !!root.selectedOutput && !root.editPending
+                      hasCursor: root.inspectorHasCursor(18)
                       foreground: root.foreground
                       fontFamily: root.fontFamily
                       onChanged: function(value) { root.editOutput({ supports_wide_color: Number(value) }) }
                     }
 
                     PanelDropdown {
+                      id: forceHdrDropdown
                       popupParent: keyCatcher
                       ownerOpen: root.opened && root.expanded
                       width: parent.cellWidth
@@ -2137,6 +2695,7 @@ Panel {
                       options: root.triStateOptions
                       value: root.selectedOutput ? String(root.selectedOutput.supports_hdr || 0) : "0"
                       enabled: !!root.selectedOutput && !root.editPending
+                      hasCursor: root.inspectorHasCursor(19)
                       foreground: root.foreground
                       fontFamily: root.fontFamily
                       onChanged: function(value) { root.editOutput({ supports_hdr: Number(value) }) }
@@ -2154,12 +2713,19 @@ Panel {
                     }
 
                     TextField {
+                      id: iccProfileInput
                       width: parent.width
                       text: root.selectedOutput ? String(root.selectedOutput.icc || "") : ""
                       placeholderText: "None — enter an absolute profile path"
                       enabled: !!root.selectedOutput && !root.editPending
+                      hasCursor: root.inspectorHasCursor(20)
                       foreground: root.foreground
-                      onEditingFinished: root.editOutput({ icc: text })
+                      onEditingFinished: {
+                        var returnToKeyboard = activeFocus
+                        root.editOutput({ icc: text })
+                        if (returnToKeyboard)
+                          Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+                      }
                     }
                   }
                 }
@@ -2436,17 +3002,21 @@ Panel {
                 spacing: Style.space(12)
 
                 Toggle {
+                  id: workspaceEnabledToggle
                   width: parent.width
                   label: "Enabled"
                   description: checked ? "Place workspaces with this profile" : "Leave placement unchanged"
                   checked: !!((root.draftProfile || {}).workspaces || {}).enabled
                   enabled: root.editorReady && !root.editPending
+                  hasCursor: root.expanded && root.activePage === "workspaces"
+                    && root.workspaceKeyboardIndex === 0
                   foreground: root.foreground
                   fontFamily: root.fontFamily
                   onClicked: root.editWorkspaces({ enabled: !checked })
                 }
 
                 PanelDropdown {
+                  id: workspaceStrategyDropdown
                   popupParent: keyCatcher
                   ownerOpen: root.opened && root.expanded
                   width: parent.width
@@ -2458,6 +3028,8 @@ Panel {
                   ]
                   value: String(((root.draftProfile || {}).workspaces || {}).strategy || "manual")
                   enabled: root.editorReady && !root.editPending
+                  hasCursor: root.expanded && root.activePage === "workspaces"
+                    && root.workspaceKeyboardIndex === 1
                   foreground: root.foreground
                   fontFamily: root.fontFamily
                   onChanged: function(value) { root.editWorkspaces({ strategy: value }) }
@@ -2468,6 +3040,7 @@ Panel {
                   spacing: Style.space(10)
 
                   NumberField {
+                    id: workspaceCountField
                     width: (parent.width - parent.spacing) / 2
                     fieldWidth: width
                     label: "WORKSPACES"
@@ -2475,12 +3048,18 @@ Panel {
                     to: 30
                     value: Number(((root.draftProfile || {}).workspaces || {}).max_workspaces || 9)
                     enabled: !root.editPending
+                    hasCursor: root.expanded && root.activePage === "workspaces"
+                      && root.workspaceKeyboardIndex === 2
                     foreground: root.foreground
                     fontFamily: root.fontFamily
-                    onModified: function(value) { root.editWorkspaces({ max_workspaces: value }) }
+                    onModified: function(value) {
+                      root.editWorkspaces({ max_workspaces: value })
+                      Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+                    }
                   }
 
                   NumberField {
+                    id: workspaceGroupSizeField
                     width: (parent.width - parent.spacing) / 2
                     fieldWidth: width
                     label: "GROUP SIZE"
@@ -2489,9 +3068,14 @@ Panel {
                     value: Number(((root.draftProfile || {}).workspaces || {}).group_size || 3)
                     enabled: !root.editPending
                       && String(((root.draftProfile || {}).workspaces || {}).strategy || "") === "sequential"
+                    hasCursor: root.expanded && root.activePage === "workspaces"
+                      && root.workspaceKeyboardIndex === 3
                     foreground: root.foreground
                     fontFamily: root.fontFamily
-                    onModified: function(value) { root.editWorkspaces({ group_size: value }) }
+                    onModified: function(value) {
+                      root.editWorkspaces({ group_size: value })
+                      Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+                    }
                   }
                 }
 
@@ -2511,8 +3095,13 @@ Panel {
                     required property int index
                     width: parent.width
                     height: Style.space(42)
-                    color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.025)
-                    borderSpec: Border.controlSpec("normal", root.foreground, Color.accent)
+                    readonly property bool hasKeyboardCursor: root.expanded
+                      && root.activePage === "workspaces" && root.workspaceKeyboardIndex === 4 + index
+                    color: hasKeyboardCursor
+                      ? Style.selectedFillFor(root.foreground, Color.accent)
+                      : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.025)
+                    borderSpec: Border.controlSpec(hasKeyboardCursor ? "focus" : "normal",
+                      root.foreground, Color.accent)
                     radius: Style.cornerRadius
 
                     Row {
@@ -2713,6 +3302,7 @@ Panel {
               foreground: root.foreground
               enabled: root.managedChecked
               onTextEdited: root.saveName = text
+              onAccepted: root.previewDraft()
             }
 
             Button {
@@ -2770,6 +3360,84 @@ Panel {
           }
         }
       }
+
+      KeyboardHelp {
+        anchors.fill: parent
+        z: 100
+        visible: root.keyboardHelpOpen
+        page: root.activePage
+        foreground: root.foreground
+        background: root.bar ? root.bar.background : Color.background
+        accent: Color.accent
+        fontFamily: root.fontFamily
+        onCloseRequested: root.keyboardHelpOpen = false
+      }
+
+      Item {
+        anchors.fill: parent
+        z: 110
+        visible: root.execEditing
+
+        Rectangle {
+          anchors.fill: parent
+          color: Qt.rgba(0, 0, 0, 0.58)
+
+          MouseArea {
+            anchors.fill: parent
+            onClicked: root.execEditing = false
+          }
+        }
+
+        BorderSurface {
+          anchors.centerIn: parent
+          width: Math.min(parent.width - Style.space(48), Style.space(660))
+          height: execContent.implicitHeight + Style.space(30)
+          color: root.bar ? root.bar.background : Color.background
+          borderSpec: Border.controlSpec("focus", root.foreground, Color.accent)
+          radius: Style.cornerRadius
+
+          Column {
+            id: execContent
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: Style.space(18)
+            anchors.rightMargin: Style.space(18)
+            spacing: Style.space(10)
+
+            Text {
+              text: "Edit Exec for " + root.selectedSavedProfileName
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.subtitle
+              font.bold: true
+            }
+
+            TextField {
+              id: profileExecInput
+              width: parent.width
+              text: root.execDraft
+              placeholderText: "/path/to/script.sh"
+              foreground: root.foreground
+              onTextEdited: root.execDraft = text
+              onAccepted: root.commitExecEdit()
+              Keys.onEscapePressed: function(event) {
+                root.execEditing = false
+                Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+                event.accepted = true
+              }
+            }
+
+            Text {
+              width: parent.width
+              text: "Enter saves. Leave empty to clear. Esc discards."
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+          }
+        }
+      }
     }
   }
 
@@ -2815,6 +3483,8 @@ Panel {
     property string label: ""
     property real value: 0
     property int decimals: 2
+    property bool hasCursor: false
+    property alias input: decimalInput
     signal modified(real value)
 
     spacing: Style.space(4)
@@ -2839,12 +3509,16 @@ Panel {
       width: parent.width
       text: decimalField.formatted()
       enabled: decimalField.enabled
+      hasCursor: decimalField.hasCursor
       foreground: root.foreground
       validator: DoubleValidator { notation: DoubleValidator.StandardNotation }
       onEditingFinished: {
+        var returnToKeyboard = activeFocus
         var parsed = Number(text)
         if (isFinite(parsed)) decimalField.modified(parsed)
         else text = decimalField.formatted()
+        if (returnToKeyboard)
+          Qt.callLater(function() { keyCatcher.forceActiveFocus() })
       }
     }
   }
