@@ -601,6 +601,21 @@ test("the layout draws only displays that own their image and names the rest", (
   assert.match(canvasQml, /visible: root\.hiddenDisplays !== ""/)
 })
 
+test("plugin text never interprets daemon or profile values as rich text", () => {
+  const pluginRoot = path.join(__dirname, "..")
+  const qmlFiles = fs.readdirSync(pluginRoot).filter(function(file) {
+    return file.endsWith(".qml")
+  })
+
+  for (const file of qmlFiles) {
+    const source = fs.readFileSync(path.join(pluginRoot, file), "utf8")
+    const textItems = source.match(/^\s*Text\s*\{/gm) || []
+    const plainTextItems = source.match(/^\s*textFormat:\s*Text\.PlainText\s*$/gm) || []
+    assert.equal(plainTextItems.length, textItems.length,
+      `${file} must render every Text item as plain text`)
+  }
+})
+
 test("the panel waits for daemon status before calling a layout custom", () => {
   const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
   assert.match(qml, /property bool documentReady: false/)

@@ -352,6 +352,7 @@ Item {
             spacing: Style.space(7)
 
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               text: root.stage === "applying"
                 ? "Applying display preview…"
@@ -367,6 +368,7 @@ Item {
             }
 
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               text: root.stage === "applying"
                 ? "This confirmation stays open while your displays reconfigure."

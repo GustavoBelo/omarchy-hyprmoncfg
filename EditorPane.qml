@@ -28,6 +28,7 @@ BorderSurface {
     height: Style.space(28)
 
     Text {
+      textFormat: Text.PlainText
       id: titleLabel
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
@@ -40,6 +41,7 @@ BorderSurface {
     }
 
     Text {
+      textFormat: Text.PlainText
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
       width: Math.max(0, parent.width - titleLabel.width - Style.space(12))

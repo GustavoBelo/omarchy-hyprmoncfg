@@ -1648,6 +1648,7 @@ Panel {
             opacity: root.backendConnected ? 1.0 : 0.6
 
             Text {
+              textFormat: Text.PlainText
               id: compactHeroGlyph
               text: root.monitorCount > 1 ? "󰍺" : "󰍹"
               color: root.foreground
@@ -1656,6 +1657,7 @@ Panel {
             }
 
             Text {
+              textFormat: Text.PlainText
               visible: root.backendConnected
               anchors.right: compactHeroGlyph.right
               anchors.bottom: compactHeroGlyph.bottom
@@ -1679,6 +1681,7 @@ Panel {
             spacing: Style.space(1)
 
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               text: "Display"
               color: root.foreground
@@ -1689,6 +1692,7 @@ Panel {
             }
 
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               text: "hyprmoncfg"
               color: root.dim
@@ -1715,6 +1719,7 @@ Panel {
         }
 
         Text {
+          textFormat: Text.PlainText
           visible: root.lastError !== ""
           width: parent.width
           text: root.lastError
@@ -1732,6 +1737,7 @@ Panel {
           PanelSeparator { foreground: root.foreground }
 
           Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: root.installed
               ? "Update hyprmoncfg to use the visual editor."
@@ -1892,6 +1898,7 @@ Panel {
                 spacing: Style.space(1)
 
                 Text {
+                  textFormat: Text.PlainText
                   width: parent.width
                   text: root.previewTransaction !== ""
                     ? (root.previewKind === "profile" ? "Keep this profile?" : "Keep this layout?")
@@ -1904,6 +1911,7 @@ Panel {
                 }
 
                 Text {
+                  textFormat: Text.PlainText
                   visible: root.previewTransaction !== ""
                   width: parent.width
                   text: root.previewSeconds + " seconds to decide"
@@ -1975,6 +1983,7 @@ Panel {
               spacing: Style.space(12)
 
               Text {
+                textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.monitorCount > 1 ? "󰍺" : "󰍹"
                 color: root.foreground
@@ -1989,6 +1998,7 @@ Panel {
                 spacing: Style.space(1)
 
                 Text {
+                  textFormat: Text.PlainText
                   width: parent.width
                   text: root.profileStatusTitle
                   color: root.foreground
@@ -1999,6 +2009,7 @@ Panel {
                 }
 
                 Text {
+                  textFormat: Text.PlainText
                   width: parent.width
                   text: root.profileStatusSubtitle
                   color: root.dim
@@ -2079,6 +2090,7 @@ Panel {
             spacing: Style.space(10)
 
             Text {
+              textFormat: Text.PlainText
               anchors.verticalCenter: parent.verticalCenter
               text: "Current setup  ·  " + root.profileStatusTitle
                 + (!root.managedChecked ? " · read-only"
@@ -2106,6 +2118,7 @@ Panel {
                 spacing: Style.space(4)
 
                 Text {
+                  textFormat: Text.PlainText
                   anchors.verticalCenter: parent.verticalCenter
                   anchors.verticalCenterOffset: 1
                   text: "?"
@@ -2115,6 +2128,7 @@ Panel {
                 }
 
                 Text {
+                  textFormat: Text.PlainText
                   anchors.verticalCenter: parent.verticalCenter
                   text: "Keys"
                   color: root.foreground
@@ -2171,6 +2185,7 @@ Panel {
               spacing: Style.space(1)
 
               Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: "Keep this layout?"
                 color: root.foreground
@@ -2180,6 +2195,7 @@ Panel {
               }
 
               Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: root.previewSeconds + " seconds before the previous layout returns"
                 color: root.dim
@@ -2779,6 +2795,7 @@ Panel {
                   height: Style.space(22)
 
                   Text {
+                    textFormat: Text.PlainText
                     width: parent.width - Style.space(58)
                     text: "PROFILE"
                     color: root.dim
@@ -2788,6 +2805,7 @@ Panel {
                   }
 
                   Text {
+                    textFormat: Text.PlainText
                     width: Style.space(58)
                     text: "MATCH"
                     color: root.dim
@@ -2818,6 +2836,7 @@ Panel {
                       anchors.rightMargin: Style.space(7)
 
                       Text {
+                        textFormat: Text.PlainText
                         anchors.verticalCenter: parent.verticalCenter
                         width: parent.width - profileMatchText.width - Style.space(8)
                         text: (modelData.active ? "›  " : "   ") + String(modelData.name || "Profile")
@@ -2829,6 +2848,7 @@ Panel {
                       }
 
                       Text {
+                        textFormat: Text.PlainText
                         id: profileMatchText
                         anchors.verticalCenter: parent.verticalCenter
                         text: Number(modelData.match_score || 0) > 0 ? String(modelData.match_score) : "—"
@@ -3111,6 +3131,7 @@ Panel {
                       spacing: Style.space(6)
 
                       Text {
+                        textFormat: Text.PlainText
                         anchors.verticalCenter: parent.verticalCenter
                         width: parent.width - orderLeft.width - orderRight.width - parent.spacing * 2
                         text: (index + 1) + ".  " + Model.outputDisplayLabel(root.draftProfile, String(modelData))
@@ -3147,6 +3168,7 @@ Panel {
                 }
 
                 Text {
+                  textFormat: Text.PlainText
                   visible: String(((root.draftProfile || {}).workspaces || {}).strategy || "") === "manual"
                   width: parent.width
                   text: "Manual rules are preserved. The full TUI remains available for editing individual rules."
@@ -3192,6 +3214,7 @@ Panel {
                   }
 
                   Text {
+                    textFormat: Text.PlainText
                     visible: root.workspaceRows.length === 0
                     text: "No workspace rules configured"
                     color: root.dim
@@ -3259,6 +3282,7 @@ Panel {
               spacing: Style.space(1)
 
               Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: root.lastError !== ""
                   ? root.lastError
@@ -3277,6 +3301,7 @@ Panel {
               }
 
               Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: root.editPending ? "Checking layout…"
                   : (root.creatingProfile ? "Name it, arrange the displays, then preview and save."
@@ -3406,6 +3431,7 @@ Panel {
             spacing: Style.space(10)
 
             Text {
+              textFormat: Text.PlainText
               text: "Edit Exec for " + root.selectedSavedProfileName
               color: root.foreground
               font.family: root.fontFamily
@@ -3429,6 +3455,7 @@ Panel {
             }
 
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               text: "Enter saves. Leave empty to clear. Esc discards."
               color: root.dim
@@ -3452,6 +3479,7 @@ Panel {
     implicitHeight: Math.max(infoLabel.implicitHeight, infoValue.implicitHeight)
 
     Text {
+      textFormat: Text.PlainText
       id: infoLabel
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
@@ -3464,6 +3492,7 @@ Panel {
     }
 
     Text {
+      textFormat: Text.PlainText
       id: infoValue
       anchors.left: infoLabel.right
       anchors.leftMargin: Style.space(8)
@@ -3557,6 +3586,7 @@ Panel {
       spacing: Style.space(12)
 
       Text {
+        textFormat: Text.PlainText
         anchors.verticalCenter: parent.verticalCenter
         text: actionRow.icon
         color: actionRow.enabled ? root.foreground : root.dim
@@ -3570,6 +3600,7 @@ Panel {
         spacing: Style.space(2)
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           text: actionRow.title
           color: actionRow.enabled ? root.foreground : root.dim
@@ -3580,6 +3611,7 @@ Panel {
         }
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           text: actionRow.subtitle
           color: root.dim
@@ -3601,6 +3633,7 @@ Panel {
     implicitHeight: Math.max(workspaceLabel.implicitHeight, workspaceDisplay.implicitHeight, workspaceValues.implicitHeight)
 
     Text {
+      textFormat: Text.PlainText
       id: workspaceLabel
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
@@ -3613,6 +3646,7 @@ Panel {
     }
 
     Text {
+      textFormat: Text.PlainText
       id: workspaceValues
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
@@ -3624,6 +3658,7 @@ Panel {
     }
 
     Text {
+      textFormat: Text.PlainText
       id: workspaceDisplay
       anchors.left: workspaceLabel.right
       anchors.leftMargin: Style.space(8)

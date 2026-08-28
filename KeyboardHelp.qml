@@ -103,6 +103,7 @@ Item {
       spacing: Style.space(13)
 
       Text {
+        textFormat: Text.PlainText
         text: "Keys"
         color: root.foreground
         font.family: root.fontFamily
@@ -119,6 +120,7 @@ Item {
           spacing: Style.space(4)
 
           Text {
+            textFormat: Text.PlainText
             text: String(parent.modelData.title || "")
             color: root.accent
             font.family: root.fontFamily
@@ -135,6 +137,7 @@ Item {
               spacing: Style.space(14)
 
               Text {
+                textFormat: Text.PlainText
                 width: Style.space(150)
                 text: String(parent.modelData.keys || "")
                 color: root.foreground
@@ -144,6 +147,7 @@ Item {
               }
 
               Text {
+                textFormat: Text.PlainText
                 width: parent.width - Style.space(164)
                 text: String(parent.modelData.action || "")
                 color: root.foreground
@@ -157,6 +161,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         text: "Any key closes this."
         color: Qt.darker(root.foreground, 1.5)
         font.family: root.fontFamily

@@ -38,6 +38,7 @@ BorderSurface {
   radius: framed ? Style.cornerRadius : 0
 
   Text {
+    textFormat: Text.PlainText
     id: hiddenLabel
     visible: root.hiddenDisplays !== ""
     anchors.left: parent.left
@@ -121,6 +122,7 @@ BorderSurface {
           spacing: Style.space(1)
 
           Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: String(card.modelData.name || "Display")
             color: root.foreground
@@ -132,6 +134,7 @@ BorderSurface {
           }
 
           Text {
+            textFormat: Text.PlainText
             visible: card.hasModelRoom
             width: parent.width
             text: Model.displayModelLabel(card.modelData, false)
@@ -143,6 +146,7 @@ BorderSurface {
           }
 
           Text {
+            textFormat: Text.PlainText
             visible: card.disconnected
             width: parent.width
             text: "not connected"
@@ -155,6 +159,7 @@ BorderSurface {
           }
 
           Text {
+            textFormat: Text.PlainText
             visible: !card.compact && root.detailed
             width: parent.width
             text: String(card.modelData.mode || "")
@@ -166,6 +171,7 @@ BorderSurface {
           }
 
           Text {
+            textFormat: Text.PlainText
             visible: !card.compact && root.detailed
             width: parent.width
             text: Model.displayScaleLayoutLabel(card.modelData)
@@ -177,6 +183,7 @@ BorderSurface {
           }
 
           Text {
+            textFormat: Text.PlainText
             visible: !card.compact && root.detailed
             width: parent.width
             text: "pos " + Number(card.modelData.x || 0) + "," + Number(card.modelData.y || 0)
@@ -188,6 +195,7 @@ BorderSurface {
           }
 
           Text {
+            textFormat: Text.PlainText
             visible: card.workspaceText !== ""
             width: parent.width
             text: card.workspaceText
@@ -264,6 +272,7 @@ BorderSurface {
     }
 
     Text {
+      textFormat: Text.PlainText
       visible: root.displays.length === 0
       anchors.centerIn: parent
       text: "No enabled displays"

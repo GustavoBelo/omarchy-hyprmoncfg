@@ -38,6 +38,7 @@ Column {
     }
 
     Text {
+      textFormat: Text.PlainText
       id: brightnessValue
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
@@ -50,6 +51,7 @@ Column {
   }
 
   Text {
+    textFormat: Text.PlainText
     width: parent.width
     text: "Selected display · " + root.displayLabel
     color: root.dim
@@ -85,6 +87,7 @@ Column {
     }
 
     Text {
+      textFormat: Text.PlainText
       id: brightnessStatus
       visible: !root.available
       anchors.centerIn: parent
