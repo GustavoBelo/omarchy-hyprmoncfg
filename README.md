@@ -77,17 +77,19 @@ omarchy plugin add https://github.com/crmne/omarchy-hyprmoncfg.git --enable
 If hyprmoncfg is missing, open the panel and choose **Install hyprmoncfg**. Omarchy opens its normal presented terminal and runs:
 
 ```sh
-if pacman -Q hyprmoncfg >/dev/null 2>&1; then
+if pacman -Q hyprmoncfg-bin >/dev/null 2>&1; then
+  yay -S --noconfirm --needed --cleanafter hyprmoncfg-bin
+elif pacman -Q hyprmoncfg >/dev/null 2>&1; then
   yay -S --noconfirm --needed --cleanafter hyprmoncfg
 else
-  omarchy pkg aur add hyprmoncfg
+  omarchy pkg aur add hyprmoncfg-bin
 fi
 systemctl --user enable hyprmoncfgd.service
 systemctl --user restart hyprmoncfgd.service
 setsid -f gtk-launch hyprmoncfg-omarchy >/dev/null 2>&1
 ```
 
-The installer uses Omarchy's install helper when the package is missing and upgrades an existing package directly through `yay`. Both commands run in Omarchy's presented terminal, never invisibly inside `omarchy-shell`. After a successful install or upgrade it explicitly restarts the daemon, so an already-running service immediately uses the new binary, then opens hyprmoncfg through its hidden Omarchy desktop launcher. That launcher ships with the main package and carries Omarchy's standard `TUI.float` window identity, so the editor opens centered at the normal floating size without putting Omarchy-specific window logic in the panel. Saving a profile updates the panel immediately over IPC.
+A fresh install takes `hyprmoncfg-bin`, the ready-made build; a machine that already has either package keeps it and upgrades it directly through `yay` (`hyprmoncfg` builds from source, as the AUR asks of packages under the plain name). Both commands run in Omarchy's presented terminal, never invisibly inside `omarchy-shell`. After a successful install or upgrade it explicitly restarts the daemon, so an already-running service immediately uses the new binary, then opens hyprmoncfg through its hidden Omarchy desktop launcher. That launcher ships with the main package and carries Omarchy's standard `TUI.float` window identity, so the editor opens centered at the normal floating size without putting Omarchy-specific window logic in the panel. Saving a profile updates the panel immediately over IPC.
 
 ## Requirements
 
