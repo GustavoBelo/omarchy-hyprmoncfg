@@ -8,8 +8,8 @@ import "Model.js" as Model
 
 Panel {
   id: root
-  moduleName: "crmne.hyprmoncfg"
-  ipcTarget: "crmne.hyprmoncfg"
+  moduleName: "GustavoBelo.hyprmoncfg"
+  ipcTarget: "GustavoBelo.hyprmoncfg"
   manageIpc: false
 
   property var anchorItem: null
@@ -39,6 +39,14 @@ Panel {
   property var pendingMethods: ({})
   property int cursorIndex: 0
   property bool cursorActive: false
+
+  // Couch state rides the status document the daemon already pushes, so the
+  // panel neither spawns a process nor polls.
+  readonly property var couchInfo: Model.couchInfo(root.document)
+  readonly property bool couchEnabled: Model.couchEnabled(root.couchInfo)
+  readonly property bool couchRunning: Model.couchSessionRunning(root.couchInfo)
+  readonly property bool couchNeedsManaging: Model.couchNeedsManaging(root.couchInfo)
+  readonly property int couchRowCount: root.couchEnabled ? 1 : 0
 
   readonly property var monitorSummaries: document && document.monitors instanceof Array ? document.monitors : []
   readonly property var layoutDisplays: Model.layoutDisplays(
@@ -215,6 +223,20 @@ Panel {
     root.close()
   }
 
+  // The session lives in the daemon, so the panel asks for it over the socket
+  // it already holds. The reply comes back as a pushed status update, which is
+  // why nothing here polls afterwards.
+  function toggleCouch() {
+    if (!root.compatible || !root.backendConnected) return
+    if (root.couchNeedsManaging) {
+      root.lastError = "Run `hyprmoncfg manage` before starting a console session"
+      return
+    }
+    root.lastError = ""
+    var method = Model.couchActionMethod(root.couchInfo)
+    root.send(method, method === "couch.start" ? { trigger: "the Omarchy panel" } : {})
+  }
+
   function connectBackend() {
     if (!root.compatible || backendSocket.connected || root.socketPath === "/hyprmoncfgd.sock") return
     if (!root.serviceEnabled && !root.serviceActive && !(root.serviceActionPending && root.serviceTargetManaged)) return
@@ -276,7 +298,7 @@ Panel {
 
   function itemCount() {
     if (!root.compatible) return 1
-    return root.layoutRowIndex + 1
+    return root.layoutRowIndex + 1 + root.couchRowCount
   }
 
   function moveCursor(delta) {
@@ -296,6 +318,10 @@ Panel {
     var row = root.actionRows[root.cursorIndex - 1]
     if (row) {
       root.activateRow(String(row.id))
+      return
+    }
+    if (root.couchEnabled && root.cursorIndex > root.layoutRowIndex) {
+      root.toggleCouch()
       return
     }
     root.launchTui()
@@ -1047,6 +1073,77 @@ Panel {
                       }
                     }
                   }
+                }
+              }
+
+              Column {
+                visible: root.couchEnabled
+                width: parent.width
+                spacing: Style.space(6)
+
+                PanelSectionHeader {
+                  text: "COUCH MODE"
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                }
+
+                ActionRow {
+                  width: parent.width
+                  rowIndex: root.layoutRowIndex + 1
+                  icon: root.couchRunning ? "\udb80\udc6a" : "\udb80\udfc0"
+                  title: Model.couchActionLabel(root.couchInfo)
+                  subtitle: root.couchRunning
+                    ? "Restore the desktop layout"
+                    : "TV layout, HDMI audio, and Steam Big Picture"
+                  onActivated: root.toggleCouch()
+                }
+
+                Item {
+                  width: parent.width
+                  implicitHeight: couchStatusRow.implicitHeight
+
+                  Row {
+                    id: couchStatusRow
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: Style.space(12)
+                    anchors.rightMargin: Style.space(12)
+                    spacing: Style.space(8)
+
+                    Rectangle {
+                      id: couchStatusDot
+                      width: Style.space(8)
+                      height: Style.space(8)
+                      radius: Style.space(4)
+                      anchors.verticalCenter: parent.verticalCenter
+                      color: root.couchRunning
+                        ? Color.accent
+                        : (root.couchNeedsManaging ? root.urgent : root.dim)
+                    }
+
+                    Text {
+                      width: parent.width - couchStatusDot.width - parent.spacing
+                      anchors.verticalCenter: parent.verticalCenter
+                      text: Model.couchStatusLabel(root.couchInfo)
+                      color: root.couchRunning ? Color.accent
+                        : (root.couchNeedsManaging ? root.urgent : root.dim)
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                      elide: Text.ElideRight
+                    }
+                  }
+                }
+
+                Text {
+                  visible: root.couchNeedsManaging
+                  width: parent.width
+                  leftPadding: Style.space(12)
+                  rightPadding: Style.space(12)
+                  text: "A session applies the console layout through hyprmoncfg, so it needs `hyprmoncfg manage`."
+                  color: root.urgent
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  wrapMode: Text.WordWrap
                 }
               }
             }

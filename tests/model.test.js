@@ -272,9 +272,9 @@ test("an upgraded package whose daemon is still the old binary offers a restart"
 })
 
 test("the panel notices its own updates, since Omarchy never pulls plugins on its own", () => {
-  const check = Model.pluginUpdateCheckCommand("crmne.hyprmoncfg", 6)
+  const check = Model.pluginUpdateCheckCommand("GustavoBelo.hyprmoncfg", 6)
   assert.equal(check[0], "sh")
-  assert.deepEqual(check.slice(4), ["crmne.hyprmoncfg", "6"])
+  assert.deepEqual(check.slice(4), ["GustavoBelo.hyprmoncfg", "6"])
   // The plugin id reaches the shell as an argument, never spliced into the script.
   assert.doesNotMatch(check[2], /crmne\.hyprmoncfg/)
   // Same comparison omarchy-plugin-update makes, and a throttle so opening the
@@ -285,8 +285,8 @@ test("the panel notices its own updates, since Omarchy never pulls plugins on it
   assert.match(check[2], /newermt/)
   assert.match(check[2], /exit 10/)
 
-  assert.deepEqual(Model.pluginUpdateCommand("crmne.hyprmoncfg"), [
-    "omarchy", "plugin", "update", "crmne.hyprmoncfg", "--yes"
+  assert.deepEqual(Model.pluginUpdateCommand("GustavoBelo.hyprmoncfg"), [
+    "omarchy", "plugin", "update", "GustavoBelo.hyprmoncfg", "--yes"
   ])
 
   const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
@@ -316,8 +316,8 @@ test("updating the panel finishes the job by reloading the shell", () => {
   assert.match(Model.shellRestartCommand()[2], /setsid/)
 
   // Only a real update is worth a restart.
-  assert.equal(Model.pluginUpdated("Updated crmne.hyprmoncfg."), true)
-  assert.equal(Model.pluginUpdated("crmne.hyprmoncfg is up to date."), false)
+  assert.equal(Model.pluginUpdated("Updated GustavoBelo.hyprmoncfg."), true)
+  assert.equal(Model.pluginUpdated("GustavoBelo.hyprmoncfg is up to date."), false)
   assert.equal(Model.pluginUpdated(""), false)
 
   const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
@@ -326,12 +326,69 @@ test("updating the panel finishes the job by reloading the shell", () => {
 })
 
 test("updating touches only this plugin, and asks nothing", () => {
-  const command = Model.pluginUpdateCommand("crmne.hyprmoncfg")
+  const command = Model.pluginUpdateCommand("GustavoBelo.hyprmoncfg")
 
   // Naming the plugin is what keeps omarchy-plugin-update from walking every
   // installed plugin: without an id it updates all of them.
-  assert.ok(command.includes("crmne.hyprmoncfg"), "the plugin id must be passed")
+  assert.ok(command.includes("GustavoBelo.hyprmoncfg"), "the plugin id must be passed")
   // --yes skips the diff and the gum confirm, which a panel has no terminal to
   // answer anyway.
   assert.ok(command.includes("--yes"), "the update must not wait on a prompt")
+})
+
+test("the couch section appears only when enabled and drives the daemon", () => {
+  const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
+  assert.match(qml, /visible: root\.couchEnabled/)
+  assert.match(qml, /root\.toggleCouch\(\)/)
+  assert.match(qml, /Model\.couchActionMethod\(root\.couchInfo\)/)
+
+  // The session lives in the daemon, so the panel asks over the socket it
+  // already holds instead of spawning a process and polling for the result.
+  assert.doesNotMatch(qml, /couchStatusProcess/)
+  assert.doesNotMatch(qml, /couchRefreshTimer/)
+  assert.doesNotMatch(qml, /"hyprmoncfg", "couch"/)
+})
+
+test("couch state is read from the pushed status document", () => {
+  const idle = Model.couchInfo({
+    couch: { enabled: true, configured: true, managed: true, active: false, tv_name: "HDMI-A-1", mode: "2560x1440@120.00Hz", hdr: true }
+  })
+  assert.equal(Model.couchEnabled(idle), true)
+  assert.equal(Model.couchSessionRunning(idle), false)
+  assert.equal(Model.couchActionLabel(idle), "Go to Couch")
+  assert.equal(Model.couchActionMethod(idle), "couch.start")
+  assert.match(Model.couchStatusLabel(idle), /HDMI-A-1 . 2560x1440@120\.00Hz . HDR/)
+
+  const running = Model.couchInfo({ couch: { enabled: true, managed: true, active: true, phase: "playing", duration: "12m 5s" } })
+  assert.equal(Model.couchActionLabel(running), "Back to Desk")
+  assert.equal(Model.couchActionMethod(running), "couch.stop")
+  assert.equal(Model.couchStatusLabel(running), "Playing · 12m 5s")
+
+  // A slow entry must not look like nothing happening.
+  const entering = Model.couchInfo({ couch: { enabled: true, managed: true, active: true, phase: "entering" } })
+  assert.equal(Model.couchStatusLabel(entering), "Switching to the TV")
+})
+
+test("the panel explains the one refusal it can", () => {
+  const unmanaged = Model.couchInfo({ couch: { enabled: true, managed: false, active: false } })
+  assert.equal(Model.couchNeedsManaging(unmanaged), true)
+  assert.match(Model.couchStatusLabel(unmanaged), /hyprmoncfg manage/)
+
+  const unconfigured = Model.couchInfo({ couch: { enabled: true, managed: true, configured: false } })
+  assert.equal(Model.couchStatusLabel(unconfigured), "Pick the TV display in the TUI")
+})
+
+test("a document without couch mode yields nothing to show", () => {
+  assert.equal(Model.couchInfo({}), null)
+  assert.equal(Model.couchInfo(null), null)
+  assert.equal(Model.couchEnabled(null), false)
+  assert.equal(Model.couchStatusLabel(null), "")
+  assert.equal(Model.couchSessionRunning(null), false)
+})
+
+test("couch rows join the same cursor list as every other row", () => {
+  const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
+  assert.match(qml, /return root\.layoutRowIndex \+ 1 \+ root\.couchRowCount/)
+  assert.match(qml, /rowIndex: root\.layoutRowIndex \+ 1/)
+  assert.match(qml, /root\.cursorIndex > root\.layoutRowIndex/)
 })

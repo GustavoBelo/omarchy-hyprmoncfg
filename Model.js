@@ -239,6 +239,82 @@ function versionAtLeast(output, minimum) {
   return true
 }
 
+// couchInfo reads the couch block out of the status document the daemon
+// pushes. It used to come from shelling out to `hyprmoncfg couch status --json`
+// on a five-shot timer; the daemon now carries it on the connection the panel
+// already holds.
+function couchInfo(document) {
+  if (!document || typeof document !== "object") return null
+  var couch = document.couch
+  if (!couch || typeof couch !== "object") return null
+  return couch
+}
+
+function couchEnabled(couch) {
+  return !!(couch && couch.enabled === true)
+}
+
+function couchSessionRunning(couch) {
+  return !!(couch && couch.active === true)
+}
+
+// couchNeedsManaging reports the one refusal the panel can explain: a session
+// writes the console layout through the normal apply path, so it cannot run
+// while monitor configuration is handed back to Hyprland.
+function couchNeedsManaging(couch) {
+  return !!(couch && couch.enabled === true && couch.managed === false)
+}
+
+function couchConfigured(couch) {
+  return !!(couch && couch.configured === true)
+}
+
+// couchStatusLabel condenses the state into one panel line. A running session
+// is the thing worth knowing about; otherwise show where play would go.
+function couchStatusLabel(couch) {
+  if (!couchEnabled(couch)) return ""
+  if (couchNeedsManaging(couch)) return "Run `hyprmoncfg manage` first"
+  if (couchSessionRunning(couch)) {
+    var label = couchPhaseLabel(couch)
+    var duration = String((couch || {}).duration || "").trim()
+    if (duration !== "") label += " · " + duration
+    return label
+  }
+  if (!couchConfigured(couch)) return "Pick the TV display in the TUI"
+  var tv = String((couch || {}).tv_name || "").trim()
+  var mode = String((couch || {}).mode || "").trim()
+  if (tv === "") return "Ready"
+  var label = tv
+  if (mode !== "") label += " · " + mode
+  if (couch.hdr === true) label += " · HDR"
+  return label
+}
+
+// couchPhaseLabel names what the session is doing, so a slow entry does not
+// look like nothing happening.
+function couchPhaseLabel(couch) {
+  switch (String((couch || {}).phase || "")) {
+    case "entering": return "Switching to the TV"
+    case "leaving": return "Back to the desk"
+    case "playing": return "Playing"
+    default: return "Session running"
+  }
+}
+
+function couchSessionDuration(couch) {
+  if (!couchSessionRunning(couch)) return ""
+  return String((couch || {}).duration || "").trim()
+}
+
+// couchActionLabel names the primary row, which flips once a session is up.
+function couchActionLabel(couch) {
+  return couchSessionRunning(couch) ? "Back to Desk" : "Go to Couch"
+}
+
+function couchActionMethod(couch) {
+  return couchSessionRunning(couch) ? "couch.stop" : "couch.start"
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     installCommand: installCommand,
@@ -256,6 +332,16 @@ if (typeof module !== "undefined") {
     pluginUpdated: pluginUpdated,
     releaseVersion: releaseVersion,
     daemonNeedsRestart: daemonNeedsRestart,
-    versionAtLeast: versionAtLeast
+    versionAtLeast: versionAtLeast,
+    couchInfo: couchInfo,
+    couchEnabled: couchEnabled,
+    couchSessionRunning: couchSessionRunning,
+    couchSessionDuration: couchSessionDuration,
+    couchNeedsManaging: couchNeedsManaging,
+    couchConfigured: couchConfigured,
+    couchStatusLabel: couchStatusLabel,
+    couchPhaseLabel: couchPhaseLabel,
+    couchActionLabel: couchActionLabel,
+    couchActionMethod: couchActionMethod
   }
 }

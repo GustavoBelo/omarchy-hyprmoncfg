@@ -5,7 +5,7 @@ import qs.Ui
 
 BarWidget {
   id: root
-  moduleName: "crmne.hyprmoncfg"
+  moduleName: "GustavoBelo.hyprmoncfg"
 
   function injectPanel() {
     var target = panelLoader.item
