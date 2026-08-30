@@ -423,7 +423,9 @@ Panel {
       root.checkingInstallation = false
       root.installationStateKnown = true
       var probedInstalled = exitCode === 0
-      var probedCompatible = probedInstalled && Model.versionAtLeast(versionOutput.text, "1.15.0")
+      // Keep in step with hyprmoncfg.minimumVersion in manifest.json. The panel
+      // drives the console session over IPC, which needs the daemon that owns it.
+      var probedCompatible = probedInstalled && Model.versionAtLeast(versionOutput.text, "1.17.0")
 
       if (root.installing && exitCode === 2) {
         root.installing = false
