@@ -30,6 +30,7 @@ Item {
   property bool actionPending: false
   property string stage: "idle"
   property string errorMessage: ""
+  property string actionError: ""
   property string targetScreenName: ""
 
   readonly property bool opened: root.stage !== "idle"
@@ -87,6 +88,7 @@ Item {
     root.saveOnCommit = save === true
     root.draftApply = draft === true
     root.errorMessage = ""
+    root.actionError = ""
     root.requestPending = true
     root.stage = "applying"
     if (root.send("preview", params) !== "") return true
@@ -126,25 +128,41 @@ Item {
   }
 
   function keep() {
-    if (root.transactionId === "" || root.actionPending) return false
+    if (root.actionPending) return false
+    if (root.transactionId === "") {
+      root.actionError = "The display preview is no longer available."
+      return false
+    }
+    if (!backendSocket.connected) {
+      root.actionError = "The display confirmation service is reconnecting. Try again in a moment."
+      return false
+    }
     root.actionPending = true
-    root.errorMessage = ""
+    root.actionError = ""
     if (root.send("commit", {
       transaction_id: root.transactionId,
       save: root.saveOnCommit
     }) !== "") return true
     root.actionPending = false
-    root.errorMessage = "Could not keep this display layout."
+    root.actionError = "Could not keep this display layout."
     return false
   }
 
   function revert() {
-    if (root.transactionId === "" || root.actionPending) return false
+    if (root.actionPending) return false
+    if (root.transactionId === "") {
+      root.actionError = "The display preview is no longer available."
+      return false
+    }
+    if (!backendSocket.connected) {
+      root.actionError = "The display confirmation service is reconnecting. Try again in a moment."
+      return false
+    }
     root.actionPending = true
-    root.errorMessage = ""
+    root.actionError = ""
     if (root.send("revert", { transaction_id: root.transactionId }) !== "") return true
     root.actionPending = false
-    root.errorMessage = "Could not restore the previous display layout."
+    root.actionError = "Could not restore the previous display layout."
     return false
   }
 
@@ -159,6 +177,7 @@ Item {
     root.actionPending = false
     root.stage = "idle"
     root.errorMessage = ""
+    root.actionError = ""
     previewClock.stop()
   }
 
@@ -171,6 +190,7 @@ Item {
   function syncPreview(pending) {
     var id = pending ? String(pending.transaction_id || "") : ""
     if (id !== "") {
+      if (root.transactionId !== id) root.actionError = ""
       root.transactionId = id
       root.profileName = String(pending.profile_name
         || (pending.profile ? pending.profile.name : "")
@@ -212,7 +232,7 @@ Item {
         root.requestFinished(false, message)
       } else if (method === "commit" || method === "revert") {
         root.actionPending = false
-        root.errorMessage = message
+        root.actionError = message
       }
       return
     }
@@ -276,6 +296,17 @@ Item {
       required property var modelData
       readonly property bool ownsDialog: !!modelData
         && String(modelData.name || "") === root.dialogScreenName
+      property bool focusPrimed: false
+
+      function restoreInputFocus() {
+        if (!guardWindow.ownsDialog || !guardWindow.backingWindowVisible) return
+        guardWindow.focusPrimed = false
+        focusPrimeTimer.restart()
+        Qt.callLater(function() {
+          if (guardWindow.ownsDialog && guardWindow.backingWindowVisible)
+            keyCatcher.forceActiveFocus()
+        })
+      }
 
       screen: modelData
       visible: root.opened && !remapGuard.remapping
@@ -284,8 +315,36 @@ Item {
       WlrLayershell.namespace: "hyprmoncfg-preview-guard"
       WlrLayershell.layer: WlrLayer.Overlay
       WlrLayershell.keyboardFocus: ownsDialog
-        ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        ? (focusPrimed ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive)
+        : WlrKeyboardFocus.None
       anchors { top: true; bottom: true; left: true; right: true }
+      mask: Region {
+        width: guardWindow.width
+        height: guardWindow.height
+      }
+
+      onBackingWindowVisibleChanged: {
+        if (backingWindowVisible) guardWindow.restoreInputFocus()
+        else {
+          focusPrimeTimer.stop()
+          focusPrimed = false
+        }
+      }
+      onOwnsDialogChanged: guardWindow.restoreInputFocus()
+      Component.onCompleted: guardWindow.restoreInputFocus()
+
+      Timer {
+        id: focusPrimeTimer
+        interval: 75
+        onTriggered: {
+          if (!guardWindow.ownsDialog || !guardWindow.backingWindowVisible) return
+          guardWindow.focusPrimed = true
+          Qt.callLater(function() {
+            if (guardWindow.ownsDialog && guardWindow.backingWindowVisible)
+              keyCatcher.forceActiveFocus()
+          })
+        }
+      }
 
       ScreenMoveRemap {
         id: remapGuard
@@ -374,8 +433,10 @@ Item {
                 ? "This confirmation stays open while your displays reconfigure."
                 : (root.stage === "error"
                   ? root.errorMessage
-                  : root.profileName + " · " + root.seconds + " seconds before the previous layout returns")
-              color: Color.foreground
+                  : (root.actionError !== ""
+                    ? root.actionError
+                    : root.profileName + " · " + root.seconds + " seconds before the previous layout returns"))
+              color: root.stage === "error" || root.actionError !== "" ? Color.urgent : Color.foreground
               opacity: 0.68
               font.family: Style.font.family
               font.pixelSize: Style.font.body
