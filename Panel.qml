@@ -40,13 +40,13 @@ Panel {
   property int cursorIndex: 0
   property bool cursorActive: false
 
-  // Couch state rides the status document the daemon already pushes, so the
+  // Console state rides the status document the daemon already pushes, so the
   // panel neither spawns a process nor polls.
-  readonly property var couchInfo: Model.couchInfo(root.document)
-  readonly property bool couchEnabled: Model.couchEnabled(root.couchInfo)
-  readonly property bool couchRunning: Model.couchSessionRunning(root.couchInfo)
-  readonly property bool couchNeedsManaging: Model.couchNeedsManaging(root.couchInfo)
-  readonly property int couchRowCount: root.couchEnabled ? 1 : 0
+  readonly property var consoleInfo: Model.consoleInfo(root.document)
+  readonly property bool consoleConfigured: Model.consoleConfigured(root.consoleInfo)
+  readonly property bool consoleHosted: Model.consoleHosted(root.consoleInfo)
+  readonly property bool consoleArming: Model.consoleArming(root.consoleInfo)
+  readonly property int consoleRowCount: root.consoleConfigured ? 1 : 0
 
   readonly property var monitorSummaries: document && document.monitors instanceof Array ? document.monitors : []
   readonly property var layoutDisplays: Model.layoutDisplays(
@@ -223,18 +223,18 @@ Panel {
     root.close()
   }
 
-  // The session lives in the daemon, so the panel asks for it over the socket
-  // it already holds. The reply comes back as a pushed status update, which is
-  // why nothing here polls afterwards.
-  function toggleCouch() {
+  // Entering is armed in the daemon rather than done here, because the
+  // countdown has to outlive whatever asked for it: this panel closes with the
+  // rest of the desktop the moment the console starts.
+  function toggleConsole() {
     if (!root.compatible || !root.backendConnected) return
-    if (root.couchNeedsManaging) {
-      root.lastError = "Run `hyprmoncfg manage` before starting a console session"
+    if (!root.consoleArming && !root.consoleHosted) {
+      root.lastError = "Run `hyprmoncfg console setup` and log in again"
       return
     }
     root.lastError = ""
-    var method = Model.couchActionMethod(root.couchInfo)
-    root.send(method, method === "couch.start" ? { trigger: "the Omarchy panel" } : {})
+    var method = Model.consoleActionMethod(root.consoleInfo)
+    root.send(method, method === "console.enter" ? { trigger: "the Omarchy panel" } : {})
   }
 
   function connectBackend() {
@@ -298,7 +298,7 @@ Panel {
 
   function itemCount() {
     if (!root.compatible) return 1
-    return root.layoutRowIndex + 1 + root.couchRowCount
+    return root.layoutRowIndex + 1 + root.consoleRowCount
   }
 
   function moveCursor(delta) {
@@ -320,8 +320,8 @@ Panel {
       root.activateRow(String(row.id))
       return
     }
-    if (root.couchEnabled && root.cursorIndex > root.layoutRowIndex) {
-      root.toggleCouch()
+    if (root.consoleConfigured && root.cursorIndex > root.layoutRowIndex) {
+      root.toggleConsole()
       return
     }
     root.launchTui()
@@ -1079,12 +1079,12 @@ Panel {
               }
 
               Column {
-                visible: root.couchEnabled
+                visible: root.consoleConfigured
                 width: parent.width
                 spacing: Style.space(6)
 
                 PanelSectionHeader {
-                  text: "COUCH MODE"
+                  text: "CONSOLE MODE"
                   foreground: root.foreground
                   fontFamily: root.fontFamily
                 }
@@ -1092,20 +1092,20 @@ Panel {
                 ActionRow {
                   width: parent.width
                   rowIndex: root.layoutRowIndex + 1
-                  icon: root.couchRunning ? "\udb80\udc6a" : "\udb80\udfc0"
-                  title: Model.couchActionLabel(root.couchInfo)
-                  subtitle: root.couchRunning
-                    ? "Restore the desktop layout"
-                    : "TV layout, HDMI audio, and Steam Big Picture"
-                  onActivated: root.toggleCouch()
+                  icon: root.consoleArming ? "\udb80\udc6a" : "\udb80\udfc0"
+                  title: Model.consoleActionLabel(root.consoleInfo)
+                  subtitle: root.consoleArming
+                    ? "Keep the desktop"
+                    : "Closes the desktop and starts Steam on the TV"
+                  onActivated: root.toggleConsole()
                 }
 
                 Item {
                   width: parent.width
-                  implicitHeight: couchStatusRow.implicitHeight
+                  implicitHeight: consoleStatusRow.implicitHeight
 
                   Row {
-                    id: couchStatusRow
+                    id: consoleStatusRow
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.leftMargin: Style.space(12)
@@ -1113,22 +1113,22 @@ Panel {
                     spacing: Style.space(8)
 
                     Rectangle {
-                      id: couchStatusDot
+                      id: consoleStatusDot
                       width: Style.space(8)
                       height: Style.space(8)
                       radius: Style.space(4)
                       anchors.verticalCenter: parent.verticalCenter
-                      color: root.couchRunning
+                      color: root.consoleArming
                         ? Color.accent
-                        : (root.couchNeedsManaging ? root.urgent : root.dim)
+                        : (root.consoleHosted ? root.dim : root.urgent)
                     }
 
                     Text {
-                      width: parent.width - couchStatusDot.width - parent.spacing
+                      width: parent.width - consoleStatusDot.width - parent.spacing
                       anchors.verticalCenter: parent.verticalCenter
-                      text: Model.couchStatusLabel(root.couchInfo)
-                      color: root.couchRunning ? Color.accent
-                        : (root.couchNeedsManaging ? root.urgent : root.dim)
+                      text: Model.consoleStatusLabel(root.consoleInfo)
+                      color: root.consoleArming ? Color.accent
+                        : (root.consoleHosted ? root.dim : root.urgent)
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.caption
                       elide: Text.ElideRight
@@ -1137,11 +1137,11 @@ Panel {
                 }
 
                 Text {
-                  visible: root.couchNeedsManaging
+                  visible: root.consoleConfigured && !root.consoleHosted
                   width: parent.width
                   leftPadding: Style.space(12)
                   rightPadding: Style.space(12)
-                  text: "A session applies the console layout through hyprmoncfg, so it needs `hyprmoncfg manage`."
+                  text: "Console mode replaces your desktop compositor, so the login manager has to start the hosting session. Run `hyprmoncfg console setup`."
                   color: root.urgent
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption

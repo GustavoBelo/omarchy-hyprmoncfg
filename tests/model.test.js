@@ -336,59 +336,67 @@ test("updating touches only this plugin, and asks nothing", () => {
   assert.ok(command.includes("--yes"), "the update must not wait on a prompt")
 })
 
-test("the couch section appears only when enabled and drives the daemon", () => {
+test("the console section appears only when a TV is chosen and drives the daemon", () => {
   const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
-  assert.match(qml, /visible: root\.couchEnabled/)
-  assert.match(qml, /root\.toggleCouch\(\)/)
-  assert.match(qml, /Model\.couchActionMethod\(root\.couchInfo\)/)
+  assert.match(qml, /visible: root\.consoleConfigured/)
+  assert.match(qml, /root\.toggleConsole\(\)/)
+  assert.match(qml, /Model\.consoleActionMethod\(root\.consoleInfo\)/)
 
-  // The session lives in the daemon, so the panel asks over the socket it
-  // already holds instead of spawning a process and polling for the result.
-  assert.doesNotMatch(qml, /couchStatusProcess/)
-  assert.doesNotMatch(qml, /couchRefreshTimer/)
-  assert.doesNotMatch(qml, /"hyprmoncfg", "couch"/)
+  // Entering is armed in the daemon, so the panel asks over the socket it
+  // already holds instead of spawning a process and polling -- it is about to
+  // be closed along with the rest of the desktop.
+  assert.doesNotMatch(qml, /consoleStatusProcess/)
+  assert.doesNotMatch(qml, /consoleRefreshTimer/)
+  assert.doesNotMatch(qml, /"hyprmoncfg", "console"/)
 })
 
-test("couch state is read from the pushed status document", () => {
-  const idle = Model.couchInfo({
-    couch: { enabled: true, configured: true, managed: true, active: false, tv_name: "HDMI-A-1", mode: "2560x1440@120.00Hz", hdr: true }
+test("console state is read from the pushed status document", () => {
+  const ready = Model.consoleInfo({
+    console: { configured: true, hosted: true, ready: true, arming: false, tv_name: "HDMI-A-1" }
   })
-  assert.equal(Model.couchEnabled(idle), true)
-  assert.equal(Model.couchSessionRunning(idle), false)
-  assert.equal(Model.couchActionLabel(idle), "Go to Couch")
-  assert.equal(Model.couchActionMethod(idle), "couch.start")
-  assert.match(Model.couchStatusLabel(idle), /HDMI-A-1 . 2560x1440@120\.00Hz . HDR/)
+  assert.equal(Model.consoleConfigured(ready), true)
+  assert.equal(Model.consoleArming(ready), false)
+  assert.equal(Model.consoleActionLabel(ready), "Console Mode")
+  assert.equal(Model.consoleActionMethod(ready), "console.enter")
+  assert.equal(Model.consoleActionEnabled(ready), true)
+  assert.equal(Model.consoleStatusLabel(ready), "HDMI-A-1")
 
-  const running = Model.couchInfo({ couch: { enabled: true, managed: true, active: true, phase: "playing", duration: "12m 5s" } })
-  assert.equal(Model.couchActionLabel(running), "Back to Desk")
-  assert.equal(Model.couchActionMethod(running), "couch.stop")
-  assert.equal(Model.couchStatusLabel(running), "Playing · 12m 5s")
-
-  // A slow entry must not look like nothing happening.
-  const entering = Model.couchInfo({ couch: { enabled: true, managed: true, active: true, phase: "entering" } })
-  assert.equal(Model.couchStatusLabel(entering), "Switching to the TV")
+  // Entering closes the desktop, so it is announced and can be called off.
+  const arming = Model.consoleInfo({ console: { configured: true, hosted: true, ready: true, arming: true } })
+  assert.equal(Model.consoleActionLabel(arming), "Cancel")
+  assert.equal(Model.consoleActionMethod(arming), "console.cancel")
+  assert.match(Model.consoleStatusLabel(arming), /tap to cancel/)
 })
 
-test("the panel explains the one refusal it can", () => {
-  const unmanaged = Model.couchInfo({ couch: { enabled: true, managed: false, active: false } })
-  assert.equal(Model.couchNeedsManaging(unmanaged), true)
-  assert.match(Model.couchStatusLabel(unmanaged), /hyprmoncfg manage/)
+test("the panel explains the refusals it can", () => {
+  // Without a hosting session there is no way back, so entering is refused
+  // rather than stranding the user in a console they cannot leave.
+  const unhosted = Model.consoleInfo({ console: { configured: true, hosted: false, ready: false } })
+  assert.equal(Model.consoleHosted(unhosted), false)
+  assert.equal(Model.consoleActionEnabled(unhosted), false)
+  assert.match(Model.consoleStatusLabel(unhosted), /console setup/)
 
-  const unconfigured = Model.couchInfo({ couch: { enabled: true, managed: true, configured: false } })
-  assert.equal(Model.couchStatusLabel(unconfigured), "Pick the TV display in the TUI")
+  const unconfigured = Model.consoleInfo({ console: { configured: false, hosted: true } })
+  assert.equal(Model.consoleStatusLabel(unconfigured), "Pick the TV display in the TUI")
+
+  // Anything else the doctor found is shown as it was reported.
+  const missing = Model.consoleInfo({
+    console: { configured: true, hosted: true, ready: false, problems: ["no gamescope session is installed"] }
+  })
+  assert.match(Model.consoleStatusLabel(missing), /no gamescope session/)
 })
 
-test("a document without couch mode yields nothing to show", () => {
-  assert.equal(Model.couchInfo({}), null)
-  assert.equal(Model.couchInfo(null), null)
-  assert.equal(Model.couchEnabled(null), false)
-  assert.equal(Model.couchStatusLabel(null), "")
-  assert.equal(Model.couchSessionRunning(null), false)
+test("a document without console mode yields nothing to show", () => {
+  assert.equal(Model.consoleInfo({}), null)
+  assert.equal(Model.consoleInfo(null), null)
+  assert.equal(Model.consoleConfigured(null), false)
+  assert.equal(Model.consoleStatusLabel(null), "")
+  assert.equal(Model.consoleArming(null), false)
 })
 
-test("couch rows join the same cursor list as every other row", () => {
+test("console rows join the same cursor list as every other row", () => {
   const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
-  assert.match(qml, /return root\.layoutRowIndex \+ 1 \+ root\.couchRowCount/)
+  assert.match(qml, /return root\.layoutRowIndex \+ 1 \+ root\.consoleRowCount/)
   assert.match(qml, /rowIndex: root\.layoutRowIndex \+ 1/)
   assert.match(qml, /root\.cursorIndex > root\.layoutRowIndex/)
 })

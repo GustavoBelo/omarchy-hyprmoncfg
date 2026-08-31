@@ -239,80 +239,65 @@ function versionAtLeast(output, minimum) {
   return true
 }
 
-// couchInfo reads the couch block out of the status document the daemon
-// pushes. It used to come from shelling out to `hyprmoncfg couch status --json`
-// on a five-shot timer; the daemon now carries it on the connection the panel
-// already holds.
-function couchInfo(document) {
+// consoleInfo reads the console block out of the status document the daemon
+// pushes, on the connection the panel already holds.
+function consoleInfo(document) {
   if (!document || typeof document !== "object") return null
-  var couch = document.couch
-  if (!couch || typeof couch !== "object") return null
-  return couch
+  var console = document.console
+  if (!console || typeof console !== "object") return null
+  return console
 }
 
-function couchEnabled(couch) {
-  return !!(couch && couch.enabled === true)
+function consoleConfigured(state) {
+  return !!(state && state.configured === true)
 }
 
-function couchSessionRunning(couch) {
-  return !!(couch && couch.active === true)
+// consoleHosted is the one refusal worth explaining. Console mode replaces the
+// desktop compositor, which only works if the login manager started the hosting
+// session; without it there would be no way back, so entering is refused rather
+// than stranding the user.
+function consoleHosted(state) {
+  return !!(state && state.hosted === true)
 }
 
-// couchNeedsManaging reports the one refusal the panel can explain: a session
-// writes the console layout through the normal apply path, so it cannot run
-// while monitor configuration is handed back to Hyprland.
-function couchNeedsManaging(couch) {
-  return !!(couch && couch.enabled === true && couch.managed === false)
+function consoleReady(state) {
+  return !!(state && state.ready === true)
 }
 
-function couchConfigured(couch) {
-  return !!(couch && couch.configured === true)
+// consoleArming is a countdown already running. Entering closes the desktop, so
+// it is announced first and can be called off.
+function consoleArming(state) {
+  return !!(state && state.arming === true)
 }
 
-// couchStatusLabel condenses the state into one panel line. A running session
-// is the thing worth knowing about; otherwise show where play would go.
-function couchStatusLabel(couch) {
-  if (!couchEnabled(couch)) return ""
-  if (couchNeedsManaging(couch)) return "Run `hyprmoncfg manage` first"
-  if (couchSessionRunning(couch)) {
-    var label = couchPhaseLabel(couch)
-    var duration = String((couch || {}).duration || "").trim()
-    if (duration !== "") label += " · " + duration
-    return label
-  }
-  if (!couchConfigured(couch)) return "Pick the TV display in the TUI"
-  var tv = String((couch || {}).tv_name || "").trim()
-  var mode = String((couch || {}).mode || "").trim()
-  if (tv === "") return "Ready"
-  var label = tv
-  if (mode !== "") label += " · " + mode
-  if (couch.hdr === true) label += " · HDR"
-  return label
+// consoleStatusLabel condenses the state into one panel line. What matters is
+// whether entering would work, and why not -- there is no session to report on,
+// because once the console starts this panel is gone with the rest of the
+// desktop.
+function consoleStatusLabel(state) {
+  if (!state) return ""
+  if (consoleArming(state)) return "Starting -- tap to cancel"
+  if (!consoleConfigured(state)) return "Pick the TV display in the TUI"
+  if (!consoleHosted(state)) return "Run `hyprmoncfg console setup`"
+  var problems = (state && state.problems) || []
+  if (problems.length > 0) return String(problems[0])
+  var tv = String((state || {}).tv_name || "").trim()
+  return tv === "" ? "Ready" : tv
 }
 
-// couchPhaseLabel names what the session is doing, so a slow entry does not
-// look like nothing happening.
-function couchPhaseLabel(couch) {
-  switch (String((couch || {}).phase || "")) {
-    case "entering": return "Switching to the TV"
-    case "leaving": return "Back to the desk"
-    case "playing": return "Playing"
-    default: return "Session running"
-  }
+// consoleActionLabel names the primary row, which flips while a countdown runs.
+function consoleActionLabel(state) {
+  return consoleArming(state) ? "Cancel" : "Console Mode"
 }
 
-function couchSessionDuration(couch) {
-  if (!couchSessionRunning(couch)) return ""
-  return String((couch || {}).duration || "").trim()
+function consoleActionMethod(state) {
+  return consoleArming(state) ? "console.cancel" : "console.enter"
 }
 
-// couchActionLabel names the primary row, which flips once a session is up.
-function couchActionLabel(couch) {
-  return couchSessionRunning(couch) ? "Back to Desk" : "Go to Couch"
-}
-
-function couchActionMethod(couch) {
-  return couchSessionRunning(couch) ? "couch.stop" : "couch.start"
+// consoleActionEnabled keeps the row from offering something that will fail.
+function consoleActionEnabled(state) {
+  if (consoleArming(state)) return true
+  return consoleReady(state)
 }
 
 if (typeof module !== "undefined") {
@@ -333,15 +318,14 @@ if (typeof module !== "undefined") {
     releaseVersion: releaseVersion,
     daemonNeedsRestart: daemonNeedsRestart,
     versionAtLeast: versionAtLeast,
-    couchInfo: couchInfo,
-    couchEnabled: couchEnabled,
-    couchSessionRunning: couchSessionRunning,
-    couchSessionDuration: couchSessionDuration,
-    couchNeedsManaging: couchNeedsManaging,
-    couchConfigured: couchConfigured,
-    couchStatusLabel: couchStatusLabel,
-    couchPhaseLabel: couchPhaseLabel,
-    couchActionLabel: couchActionLabel,
-    couchActionMethod: couchActionMethod
+    consoleInfo: consoleInfo,
+    consoleConfigured: consoleConfigured,
+    consoleHosted: consoleHosted,
+    consoleReady: consoleReady,
+    consoleArming: consoleArming,
+    consoleStatusLabel: consoleStatusLabel,
+    consoleActionLabel: consoleActionLabel,
+    consoleActionMethod: consoleActionMethod,
+    consoleActionEnabled: consoleActionEnabled
   }
 }
