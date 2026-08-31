@@ -715,6 +715,12 @@ Panel {
     return root.sourceProfile !== "" ? root.sourceProfile : String(root.saveName || "").trim()
   }
 
+  function previewCoordinatorReady(method) {
+    return !!root.previewCoordinator
+      && root.previewCoordinator.connected === true
+      && typeof root.previewCoordinator[method] === "function"
+  }
+
   function previewDraft() {
     if (!root.managedChecked) return
     var name = root.draftName()
@@ -724,8 +730,7 @@ Panel {
     }
     root.lastError = ""
     root.previewPending = true
-    if (root.previewCoordinator
-        && typeof root.previewCoordinator.startDraftPreview === "function") {
+    if (root.previewCoordinatorReady("startDraftPreview")) {
       if (!root.previewCoordinator.startDraftPreview(
           Model.namedProfile(root.draftProfile, name), 10)) {
         root.previewPending = false
@@ -747,8 +752,7 @@ Panel {
     var profile = Model.namedProfile(root.draftProfile, name)
     root.lastError = ""
     root.previewPending = true
-    if (root.previewCoordinator
-        && typeof root.previewCoordinator.startDraftApply === "function") {
+    if (root.previewCoordinatorReady("startDraftApply")) {
       if (!root.previewCoordinator.startDraftApply(profile, 10)) {
         root.previewPending = false
         root.lastError = String(root.previewCoordinator.errorMessage
@@ -891,8 +895,7 @@ Panel {
     }
     root.lastError = ""
     root.previewPending = true
-    if (root.previewCoordinator
-        && typeof root.previewCoordinator.startSavedProfilePreview === "function") {
+    if (root.previewCoordinatorReady("startSavedProfilePreview")) {
       if (!root.previewCoordinator.startSavedProfilePreview(selected, 10)) {
         root.previewPending = false
         root.lastError = String(root.previewCoordinator.errorMessage
@@ -1006,7 +1009,8 @@ Panel {
       }
       root.updatePreviewClock()
       previewTimer.start()
-      if (!root.previewCoordinator && !root.opened && !previewRecoveryTimer.running)
+      if ((!root.previewCoordinator || !root.previewCoordinator.connected)
+          && !root.opened && !previewRecoveryTimer.running)
         previewRecoveryTimer.start()
       return
     }
