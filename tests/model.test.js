@@ -850,8 +850,7 @@ test("the console page offers the choices the daemon reports", () => {
       { connector: "HDMI-A-1", description: "Samsung SAMSUNG" }
     ],
     boot_modes: ["desktop", "console", "last"],
-    desktop_sessions: ["omarchy.desktop"],
-    apps_to_close: ["obsidian", "chromium"]
+    desktop_sessions: ["omarchy.desktop"]
   }})
 
   const displays = Model.consoleDisplayOptions(state)
@@ -865,8 +864,6 @@ test("the console page offers the choices the daemon reports", () => {
   assert.match(boot[2].label, /left off/)
 
   assert.equal(Model.consoleSessionOptions(state)[0].label, "omarchy")
-  assert.equal(Model.consoleAppsLabel(state), "2 applications")
-  assert.match(Model.consoleAppsLabel(Model.consoleInfo({ console: { apps_to_close: [] } })), /Nothing/)
 })
 
 test("the console page is a page, reachable the way the others are", () => {

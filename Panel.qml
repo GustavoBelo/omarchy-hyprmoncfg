@@ -3122,15 +3122,6 @@ Panel {
                   onClicked: root.configureConsole({ trigger: !root.consoleTrigger })
                 }
 
-                Text {
-                  textFormat: Text.PlainText
-                  width: parent.width
-                  text: "Closed first · " + Model.consoleAppsLabel(root.consoleInfo)
-                  color: root.dim
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.bodySmall
-                  wrapMode: Text.WordWrap
-                }
               }
             }
 

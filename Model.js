@@ -838,15 +838,6 @@ function consoleSessionOptions(state) {
   })
 }
 
-// consoleAppsLabel says how many applications get closed on the way in, since
-// the list itself is edited where there is room for it.
-function consoleAppsLabel(state) {
-  var apps = (state && state.apps_to_close) || []
-  if (apps.length === 0) return "Nothing is closed first"
-  if (apps.length === 1) return apps[0]
-  return apps.length + " applications"
-}
-
 // consoleActionEnabled keeps the row from offering something that will fail.
 function consoleActionEnabled(state) {
   if (consoleArming(state)) return true
@@ -923,7 +914,6 @@ if (typeof module !== "undefined") {
     consoleActionEnabled: consoleActionEnabled,
     consoleDisplayOptions: consoleDisplayOptions,
     consoleBootOptions: consoleBootOptions,
-    consoleSessionOptions: consoleSessionOptions,
-    consoleAppsLabel: consoleAppsLabel
+    consoleSessionOptions: consoleSessionOptions
   }
 }
