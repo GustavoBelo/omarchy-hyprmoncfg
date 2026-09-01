@@ -758,10 +758,14 @@ test("updating touches only this plugin, and asks nothing", () => {
   assert.ok(command.includes("--yes"), "the update must not wait on a prompt")
 })
 
-test("the console section appears only when a TV is chosen and drives the daemon", () => {
+test("console mode is an action row, not a section of its own", () => {
   const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
-  assert.match(qml, /visible: root\.consoleConfigured/)
-  assert.match(qml, /root\.toggleConsole\(\)/)
+  // It belongs with the other things the panel does, so it inherits their
+  // visuals, their cursor handling, and their place in both views.
+  assert.match(qml, /id: "console"/)
+  assert.match(qml, /if \(root\.consoleConfigured\)\s*\n\s*rows\.push/)
+  assert.match(qml, /id === "console"\) root\.toggleConsole\(\)/)
+  assert.doesNotMatch(qml, /CONSOLE MODE/)
   assert.match(qml, /Model\.consoleActionMethod\(root\.consoleInfo\)/)
 
   // Entering is armed in the daemon, so the panel asks over the socket it
@@ -781,13 +785,13 @@ test("console state is read from the pushed status document", () => {
   assert.equal(Model.consoleActionLabel(ready), "Console Mode")
   assert.equal(Model.consoleActionMethod(ready), "console.enter")
   assert.equal(Model.consoleActionEnabled(ready), true)
-  assert.equal(Model.consoleStatusLabel(ready), "HDMI-A-1")
+  assert.match(Model.consoleStatusLabel(ready), /Closes the desktop and starts Steam on HDMI-A-1/)
 
   // Entering closes the desktop, so it is announced and can be called off.
   const arming = Model.consoleInfo({ console: { configured: true, hosted: true, ready: true, arming: true } })
-  assert.equal(Model.consoleActionLabel(arming), "Cancel")
+  assert.equal(Model.consoleActionLabel(arming), "Keep the desktop")
   assert.equal(Model.consoleActionMethod(arming), "console.cancel")
-  assert.match(Model.consoleStatusLabel(arming), /tap to cancel/)
+  assert.match(Model.consoleStatusLabel(arming), /starts in a moment/)
 })
 
 test("the panel explains the refusals it can", () => {
@@ -818,7 +822,18 @@ test("a document without console mode yields nothing to show", () => {
 
 test("console rows join the same cursor list as every other row", () => {
   const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
-  assert.match(qml, /return root\.layoutRowIndex \+ 1 \+ root\.consoleRowCount/)
-  assert.match(qml, /rowIndex: root\.layoutRowIndex \+ 1/)
-  assert.match(qml, /root\.cursorIndex > root\.layoutRowIndex/)
+  // Being an action row means there is no parallel count to keep in step: the
+  // cursor maths that already covers every other row covers this one too.
+  assert.doesNotMatch(qml, /consoleRowCount/)
+  assert.match(qml, /rowIndex: 1 \+ index/)
+  assert.match(qml, /readonly property int layoutRowIndex: 1 \+ root\.actionRows\.length/)
+})
+
+// A subtitle that tells the user how to fix something must not read like one
+// that is merely describing state.
+test("an action row can mark its subtitle as something to act on", () => {
+  const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
+  assert.match(qml, /property bool urgent: false/)
+  assert.match(qml, /urgent: modelData\.urgent === true/)
+  assert.match(qml, /urgent: !root\.consoleArming && !root\.consoleHosted/)
 })

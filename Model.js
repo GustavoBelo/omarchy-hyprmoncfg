@@ -779,24 +779,27 @@ function consoleArming(state) {
   return !!(state && state.arming === true)
 }
 
-// consoleStatusLabel condenses the state into one panel line. What matters is
-// whether entering would work, and why not -- there is no session to report on,
-// because once the console starts this panel is gone with the rest of the
-// desktop.
+// consoleStatusLabel is the action row's subtitle, so it says what activating
+// the row will do -- or, when it would not work, what to do about that. The
+// other rows in that list read the same way.
 function consoleStatusLabel(state) {
   if (!state) return ""
-  if (consoleArming(state)) return "Starting -- tap to cancel"
+  if (consoleArming(state)) return "Console mode starts in a moment"
   if (!consoleConfigured(state)) return "Pick the TV display in the TUI"
-  if (!consoleHosted(state)) return "Run `hyprmoncfg console setup`"
+  if (!consoleHosted(state)) return "Run `hyprmoncfg console setup`, then log in again"
   var problems = (state && state.problems) || []
   if (problems.length > 0) return String(problems[0])
   var tv = String((state || {}).tv_name || "").trim()
-  return tv === "" ? "Ready" : tv
+  return tv === ""
+    ? "Closes the desktop and starts Steam on the TV"
+    : "Closes the desktop and starts Steam on " + tv
 }
 
-// consoleActionLabel names the primary row, which flips while a countdown runs.
+// consoleActionLabel names the row, which flips while a countdown runs. It says
+// what activating it does rather than naming the mechanism: "Cancel" leaves the
+// reader working out what is being cancelled.
 function consoleActionLabel(state) {
-  return consoleArming(state) ? "Cancel" : "Console Mode"
+  return consoleArming(state) ? "Keep the desktop" : "Console Mode"
 }
 
 function consoleActionMethod(state) {

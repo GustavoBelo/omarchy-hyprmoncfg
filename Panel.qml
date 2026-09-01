@@ -92,7 +92,6 @@ Panel {
   readonly property bool consoleConfigured: Model.consoleConfigured(root.consoleInfo)
   readonly property bool consoleHosted: Model.consoleHosted(root.consoleInfo)
   readonly property bool consoleArming: Model.consoleArming(root.consoleInfo)
-  readonly property int consoleRowCount: root.consoleConfigured ? 1 : 0
 
   readonly property var monitorSummaries: document && document.monitors instanceof Array ? document.monitors : []
   readonly property var layoutDisplays: root.daemonPreview && root.daemonPreview.profile
@@ -188,6 +187,17 @@ Panel {
         subtitle: root.pluginUpdating
           ? "Pulling the new version"
           : "A newer version is available"
+      })
+    // Console mode is something you do, so it belongs with the other things you
+    // do rather than in a section of its own. It only appears once a TV has been
+    // chosen: before that there is nothing for it to play on.
+    if (root.consoleConfigured)
+      rows.push({
+        id: "console",
+        icon: root.consoleArming ? "󰅖" : "󰊴",
+        title: Model.consoleActionLabel(root.consoleInfo),
+        subtitle: Model.consoleStatusLabel(root.consoleInfo),
+        urgent: !root.consoleArming && !root.consoleHosted
       })
     return rows
   }
@@ -1097,7 +1107,7 @@ Panel {
 
   function itemCount() {
     if (!root.compatible) return 1
-    return root.layoutRowIndex + 1 + root.consoleRowCount
+    return root.layoutRowIndex + 1
   }
 
   function moveCursor(delta) {
@@ -1119,16 +1129,13 @@ Panel {
       root.activateRow(String(row.id))
       return
     }
-    if (root.consoleConfigured && root.cursorIndex > root.layoutRowIndex) {
-      root.toggleConsole()
-      return
-    }
     root.launchTui()
   }
 
   function activateRow(id) {
     if (id === "restart-service") root.restartService()
     else if (id === "update-plugin") root.updatePlugin()
+    else if (id === "console") root.toggleConsole()
   }
 
   function checkPluginUpdate() {
@@ -1867,6 +1874,7 @@ Panel {
               icon: String(modelData.icon)
               title: String(modelData.title)
               subtitle: String(modelData.subtitle)
+              urgent: modelData.urgent === true
               enabled: !root.pluginUpdating || String(modelData.id) !== "update-plugin"
               onActivated: root.activateRow(String(modelData.id))
             }
@@ -3283,79 +3291,7 @@ Panel {
                 }
               }
 
-              Column {
-                visible: root.consoleConfigured
-                width: parent.width
-                spacing: Style.space(6)
-
-                PanelSectionHeader {
-                  text: "CONSOLE MODE"
-                  foreground: root.foreground
-                  fontFamily: root.fontFamily
-                }
-
-                ActionRow {
-                  width: parent.width
-                  rowIndex: root.layoutRowIndex + 1
-                  icon: root.consoleArming ? "\udb80\udc6a" : "\udb80\udfc0"
-                  title: Model.consoleActionLabel(root.consoleInfo)
-                  subtitle: root.consoleArming
-                    ? "Keep the desktop"
-                    : "Closes the desktop and starts Steam on the TV"
-                  onActivated: root.toggleConsole()
-                }
-
-                Item {
-                  width: parent.width
-                  implicitHeight: consoleStatusRow.implicitHeight
-
-                  Row {
-                    id: consoleStatusRow
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: Style.space(12)
-                    anchors.rightMargin: Style.space(12)
-                    spacing: Style.space(8)
-
-                    Rectangle {
-                      id: consoleStatusDot
-                      width: Style.space(8)
-                      height: Style.space(8)
-                      radius: Style.space(4)
-                      anchors.verticalCenter: parent.verticalCenter
-                      color: root.consoleArming
-                        ? Color.accent
-                        : (root.consoleHosted ? root.dim : root.urgent)
-                    }
-
-                    Text {
-                      width: parent.width - consoleStatusDot.width - parent.spacing
-                      anchors.verticalCenter: parent.verticalCenter
-                      text: Model.consoleStatusLabel(root.consoleInfo)
-                      textFormat: Text.PlainText
-                      color: root.consoleArming ? Color.accent
-                        : (root.consoleHosted ? root.dim : root.urgent)
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.caption
-                      elide: Text.ElideRight
-                    }
-                  }
-                }
-
-                Text {
-                  visible: root.consoleConfigured && !root.consoleHosted
-                  width: parent.width
-                  leftPadding: Style.space(12)
-                  rightPadding: Style.space(12)
-                  text: "Console mode replaces your desktop compositor, so the login manager has to start the hosting session. Run `hyprmoncfg console setup`."
-                  textFormat: Text.PlainText
-                  color: root.urgent
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                  wrapMode: Text.WordWrap
-                }
-              }
-            }
+}
           }
         }
 
@@ -3664,6 +3600,10 @@ Panel {
     property string icon: ""
     property string title: ""
     property string subtitle: ""
+    // urgent marks a subtitle that is a repair instruction rather than a
+    // description, so it reads as something to act on instead of fading into
+    // the same grey as everything else.
+    property bool urgent: false
     signal activated()
 
     hasCursor: root.cursorActive && root.cursorIndex === rowIndex
@@ -3720,7 +3660,7 @@ Panel {
           textFormat: Text.PlainText
           width: parent.width
           text: actionRow.subtitle
-          color: root.dim
+          color: actionRow.urgent && actionRow.enabled ? root.urgent : root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.bodySmall
           elide: Text.ElideRight
