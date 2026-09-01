@@ -4,7 +4,20 @@ An Omarchy bar panel for [hyprmoncfg](https://hyprmoncfg.dev/). Create multi-mon
 
 ![hyprmoncfg for Omarchy](preview.png)
 
-The panel shows your live layout, the active profile, and a switch to hand display management back to Omarchy. The editor opens from it for everything below.
+Version 2.0 brings the panel to practical feature parity with the TUI for monitor layouts, profiles, and workspace planning—and then goes further with direct pointer-driven arrangement and per-display brightness. The compact view keeps the everyday controls close; expand it for the complete spatial editor. The TUI remains available for a keyboard-first or standalone workflow.
+
+<details>
+<summary>See the expanded editor</summary>
+
+### Layout and display controls
+
+![Expanded monitor layout and display editor](screenshots/layout.png)
+
+### Saved profiles
+
+![Expanded saved profile browser](screenshots/profiles.png)
+
+</details>
 
 ## Automatically match the right layout to the connected monitors
 
@@ -15,6 +28,17 @@ It knows your monitors apart by make, model and serial, not by which port they a
 A small background service is what watches for this. It catches hotplug, lid and wake events as they happen, including before the bar has started and coming out of a suspend.
 
 ## What it does
+
+**Live controls**
+
+- Per-display brightness for the monitor selected on the layout, using Omarchy's own internal-backlight, DDC/CI, and Apple Display support
+- Brightness stays live hardware state rather than being stored in layout profiles, and changes made by Omarchy's panel or brightness keys remain compatible
+
+**Keyboard controls**
+
+- The expanded panel mirrors the TUI shortcuts: `1`/`2`/`3` switch pages, `a` applies, `s` saves, `r` resets, and `?` shows the contextual key guide
+- On the layout, arrows move the selected display; `Shift`, `Ctrl`, and `Alt` preserve the TUI's fine movement and nearest-display snapping
+- Profile browsing and workspace settings use the same arrow, Enter, load, edit, and delete keys as the TUI
 
 **Layout**
 
@@ -27,7 +51,7 @@ A small background service is what watches for this. It catches hotplug, lid and
 
 - Nine colour management presets, from sRGB through wide gamut to HDR
 - Forced HDR, forced wide colour, and ICC profile paths
-- 8, 10 and 16-bit depth
+- 8 and 10-bit depth
 - SDR brightness, saturation and transfer curve, with luminance floors and ceilings for SDR and HDR
 - Variable refresh rate: off, on, or fullscreen only
 
@@ -53,15 +77,24 @@ omarchy plugin add https://github.com/GustavoBelo/omarchy-hyprmoncfg.git --enabl
 If hyprmoncfg is missing, open the panel and choose **Install hyprmoncfg**. Omarchy opens its normal presented terminal and runs:
 
 ```sh
-omarchy pkg aur add hyprmoncfg && systemctl --user enable hyprmoncfgd.service && systemctl --user restart hyprmoncfgd.service && setsid -f gtk-launch hyprmoncfg-omarchy >/dev/null 2>&1
+if pacman -Q hyprmoncfg-bin >/dev/null 2>&1; then
+  yay -S --needed --cleanafter hyprmoncfg-bin
+elif pacman -Q hyprmoncfg >/dev/null 2>&1; then
+  yay -S --needed --cleanafter hyprmoncfg
+else
+  omarchy pkg aur add hyprmoncfg-bin
+fi
+systemctl --user enable hyprmoncfgd.service
+systemctl --user restart hyprmoncfgd.service
+setsid -f gtk-launch hyprmoncfg-omarchy >/dev/null 2>&1
 ```
 
-The installer explicitly restarts the daemon after installing or updating the package, so an already-running service immediately uses the new binary. It then opens hyprmoncfg through its hidden Omarchy desktop launcher. That launcher ships with the main package and carries Omarchy's standard `TUI.float` window identity, so the editor opens centered at the normal floating size without putting Omarchy-specific window logic in the panel. Saving a profile updates the panel immediately over IPC. The plugin never runs `yay` or requests privileges invisibly inside `omarchy-shell`.
+A fresh install takes `hyprmoncfg-bin`, the ready-made build; a machine that already has either package keeps it and upgrades it directly through `yay` (`hyprmoncfg` builds from source, as the AUR asks of packages under the plain name). Upgrades keep `yay` interactive so the user can review AUR changes. Both commands run in Omarchy's presented terminal, never invisibly inside `omarchy-shell`. After a successful install or upgrade it explicitly restarts the daemon, so an already-running service immediately uses the new binary, then opens hyprmoncfg through its hidden Omarchy desktop launcher. That launcher ships with the main package and carries Omarchy's standard `TUI.float` window identity, so the editor opens centered at the normal floating size without putting Omarchy-specific window logic in the panel. Saving a profile updates the panel immediately over IPC.
 
 ## Requirements
 
 - Omarchy Quattro with third-party shell plugins
-- hyprmoncfg 1.12.0 or newer (installed from the panel when missing)
+- hyprmoncfg 1.16.0 or newer (installed from the panel when missing)
 
 ## Staying up to date
 
@@ -71,20 +104,27 @@ Upgrading the hyprmoncfg package is a separate matter: installing runs as root a
 
 ## Remove
 
-Hand your displays back first, then remove the panel:
+### Hand display management back to Omarchy
 
 ```sh
 hyprmoncfg unmanage
 omarchy plugin remove GustavoBelo.hyprmoncfg
 ```
 
-`unmanage` stops automatic switching, takes hyprmoncfg's line back out of your
-Hyprland config, hands Omarchy's monitor watcher back, and reloads. Without it,
-the generated rules keep loading last and keep winning, even with the panel
-gone. Run `hyprmoncfg manage` to hand it all back.
+`unmanage` stops automatic switching, removes the hyprmoncfg include from your Hyprland configuration, hands Omarchy's monitor watcher back, and reloads Hyprland. Omarchy or any other display tool can then control your monitor configuration normally.
 
-Your saved profiles stay put. Remove the package separately if you are done with
-hyprmoncfg entirely.
+The daemon remains enabled and running, but this is intentional and harmless: its persisted unmanaged state prevents it from applying profiles or changing your monitor configuration, and it sits idle without using CPU. Run `hyprmoncfg manage` if you want it to take control again.
+
+### Fully uninstall hyprmoncfg
+
+Stopping and removing the daemon is not required after `unmanage`. If you nevertheless want to remove hyprmoncfg completely, run the commands above and then:
+
+```sh
+systemctl --user disable --now hyprmoncfgd.service
+omarchy pkg drop hyprmoncfg
+```
+
+Your saved profiles remain in `~/.config/hyprmoncfg/profiles`.
 
 ## Development
 

@@ -75,6 +75,7 @@ BarWidget {
         }
 
         Text {
+          textFormat: Text.PlainText
           visible: root.backendConnected
           anchors.right: barDisplayGlyph.right
           anchors.bottom: barDisplayGlyph.bottom
