@@ -1229,7 +1229,7 @@ Panel {
       root.checkingInstallation = false
       root.installationStateKnown = true
       var probedInstalled = exitCode === 0
-      var probedCompatible = probedInstalled && Model.versionAtLeast(versionOutput.text, "1.16.0")
+      var probedCompatible = probedInstalled && Model.versionAtLeast(versionOutput.text, "1.16.2")
 
       if (root.installing && exitCode === 2) {
         root.installing = false
@@ -1245,7 +1245,7 @@ Panel {
         root.installing = false
         installPoll.stop()
         installTimeout.stop()
-        root.lastError = "The update finished, but hyprmoncfg 1.16.0 or newer is still required."
+        root.lastError = "The update finished, but hyprmoncfg 1.16.2 or newer is still required."
         return
       }
 
