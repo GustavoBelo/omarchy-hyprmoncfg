@@ -28,6 +28,8 @@ Item {
   property bool draftApply: false
   property bool requestPending: false
   property bool actionPending: false
+  property bool yieldingToPanel: false
+  property bool yieldedPreviewSeen: false
   property string stage: "idle"
   property string errorMessage: ""
   property string actionError: ""
@@ -71,6 +73,13 @@ Item {
     root.targetScreenName = focused ? String(focused.name || "") : ""
   }
 
+  function yieldToPanel() {
+    root.yieldingToPanel = true
+    root.yieldedPreviewSeen = false
+    panelYieldTimeout.restart()
+    root.clear()
+  }
+
   function beginPreview(params, name, save, draft) {
     if (root.opened || root.requestPending || root.actionPending) {
       root.errorMessage = "Finish the current display preview first."
@@ -84,6 +93,9 @@ Item {
     }
 
     root.rememberScreen()
+    root.yieldingToPanel = false
+    root.yieldedPreviewSeen = false
+    panelYieldTimeout.stop()
     root.profileName = String(name || "Display layout")
     root.saveOnCommit = save === true
     root.draftApply = draft === true
@@ -189,6 +201,16 @@ Item {
 
   function syncPreview(pending) {
     var id = pending ? String(pending.transaction_id || "") : ""
+    if (root.yieldingToPanel) {
+      if (id !== "") {
+        root.yieldedPreviewSeen = true
+        panelYieldTimeout.stop()
+      } else if (root.yieldedPreviewSeen) {
+        root.yieldingToPanel = false
+        root.yieldedPreviewSeen = false
+      }
+      return
+    }
     if (id !== "") {
       if (root.transactionId !== id) root.actionError = ""
       root.transactionId = id
@@ -266,9 +288,11 @@ Item {
     onConnectedChanged: {
       if (connected) root.send("subscribe", {})
       else {
+        var shouldYield = root.opened || root.requestPending || root.transactionId !== ""
         root.pendingMethods = ({})
         root.requestPending = false
         root.actionPending = false
+        if (shouldYield) root.yieldToPanel()
       }
     }
     onError: function(error) { backendSocket.connected = false }
@@ -279,6 +303,15 @@ Item {
     repeat: true
     running: root.socketPath !== "/hyprmoncfgd.sock" && !backendSocket.connected
     onTriggered: backendSocket.connected = true
+  }
+
+  Timer {
+    id: panelYieldTimeout
+    interval: 15000
+    onTriggered: {
+      if (!root.yieldingToPanel || root.yieldedPreviewSeen) return
+      root.yieldingToPanel = false
+    }
   }
 
   Timer {
