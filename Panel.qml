@@ -718,7 +718,14 @@ Panel {
   function previewCoordinatorReady(method) {
     return !!root.previewCoordinator
       && root.previewCoordinator.connected === true
+      && root.previewCoordinator.yieldingToPanel !== true
       && typeof root.previewCoordinator[method] === "function"
+  }
+
+  function yieldPreviewToPanel() {
+    if (root.previewCoordinator
+        && typeof root.previewCoordinator.yieldToPanel === "function")
+      root.previewCoordinator.yieldToPanel()
   }
 
   function previewDraft() {
@@ -739,6 +746,7 @@ Panel {
       }
       return
     }
+    root.yieldPreviewToPanel()
     root.send("preview", {
       profile: Model.namedProfile(root.draftProfile, name),
       timeout_seconds: 10,
@@ -760,6 +768,7 @@ Panel {
       }
       return
     }
+    root.yieldPreviewToPanel()
     root.send("preview", {
       profile: profile,
       timeout_seconds: 10,
@@ -903,6 +912,7 @@ Panel {
       }
       return
     }
+    root.yieldPreviewToPanel()
     root.send("preview", { profile_name: selected, timeout_seconds: 10 }, {
       kind: "profile",
       name: selected
@@ -1009,7 +1019,8 @@ Panel {
       }
       root.updatePreviewClock()
       previewTimer.start()
-      if ((!root.previewCoordinator || !root.previewCoordinator.connected)
+      if ((!root.previewCoordinator || !root.previewCoordinator.connected
+          || root.previewCoordinator.yieldingToPanel)
           && !root.opened && !previewRecoveryTimer.running)
         previewRecoveryTimer.start()
       return
