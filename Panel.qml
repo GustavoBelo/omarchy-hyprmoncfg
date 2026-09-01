@@ -92,6 +92,15 @@ Panel {
   readonly property bool consoleConfigured: Model.consoleConfigured(root.consoleInfo)
   readonly property bool consoleHosted: Model.consoleHosted(root.consoleInfo)
   readonly property bool consoleArming: Model.consoleArming(root.consoleInfo)
+  readonly property bool consoleTrigger: !!(root.consoleInfo && root.consoleInfo.trigger === true)
+  // The page exists when the machine could run a console at all, which is a
+  // wider question than whether one has been set up: somebody has to be able to
+  // choose the TV in the first place.
+  readonly property bool consoleAvailable: !!root.consoleInfo
+
+  function configureConsole(changes) {
+    root.send("console.configure", changes)
+  }
 
   readonly property var monitorSummaries: document && document.monitors instanceof Array ? document.monitors : []
   readonly property var layoutDisplays: root.daemonPreview && root.daemonPreview.profile
@@ -249,7 +258,7 @@ Panel {
     { value: "layout", label: "1  Layout" },
     { value: "profiles", label: "2  Profiles" },
     { value: "workspaces", label: "3  Workspaces" }
-  ]
+  ].concat(root.consoleAvailable ? [{ value: "console", label: "4  Console" }] : [])
   readonly property var inspectorOptions: [
     { value: "display", label: "Display" },
     { value: "color", label: "Color" }
@@ -870,6 +879,10 @@ Panel {
     }
     if (key === "1" || key === "2" || key === "3") {
       root.activePage = key === "1" ? "layout" : (key === "2" ? "profiles" : "workspaces")
+      return
+    }
+    if (key === "4" && root.consoleAvailable) {
+      root.activePage = "console"
       return
     }
     if (key === "?") {
@@ -3034,6 +3047,139 @@ Panel {
                   dim: root.dim
                   accent: Color.accent
                   fontFamily: root.fontFamily
+                }
+              }
+            }
+          }
+
+          Item {
+            visible: root.activePage === "console"
+            anchors.fill: parent
+
+            EditorPane {
+              id: consoleSettingsPane
+              anchors.left: parent.left
+              anchors.top: parent.top
+              anchors.bottom: parent.bottom
+              width: Math.round(parent.width * 0.42)
+              title: "Console Mode"
+              meta: root.consoleConfigured ? String(root.consoleInfo.tv_name || "") : "not set up"
+              active: true
+              foreground: root.foreground
+              dim: root.dim
+              accent: Color.accent
+              fontFamily: root.fontFamily
+
+              Column {
+                anchors.fill: parent
+                spacing: Style.space(10)
+
+                PanelDropdown {
+                  popupParent: keyCatcher
+                  ownerOpen: root.opened && root.expanded
+                  width: parent.width
+                  label: "PLAYS ON"
+                  options: Model.consoleDisplayOptions(root.consoleInfo)
+                  value: String((root.consoleInfo || {}).tv_name || "")
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  onChanged: function(value) { root.configureConsole({ tv_name: value }) }
+                }
+
+                PanelDropdown {
+                  popupParent: keyCatcher
+                  ownerOpen: root.opened && root.expanded
+                  width: parent.width
+                  label: "STARTS IN"
+                  options: Model.consoleBootOptions(root.consoleInfo)
+                  value: String((root.consoleInfo || {}).boot || "desktop")
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  onChanged: function(value) { root.configureConsole({ boot: value }) }
+                }
+
+                PanelDropdown {
+                  popupParent: keyCatcher
+                  ownerOpen: root.opened && root.expanded
+                  width: parent.width
+                  label: "COMES BACK TO"
+                  options: Model.consoleSessionOptions(root.consoleInfo)
+                  value: String((root.consoleInfo || {}).desktop_session || "")
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  onChanged: function(value) { root.configureConsole({ desktop_session: value }) }
+                }
+
+                Toggle {
+                  width: parent.width
+                  label: "Start on controller"
+                  description: root.consoleTrigger
+                    ? "Switching a pad on closes the desktop after a warning"
+                    : "Controllers do not start a console session"
+                  checked: root.consoleTrigger
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  onClicked: root.configureConsole({ trigger: !root.consoleTrigger })
+                }
+
+                Text {
+                  textFormat: Text.PlainText
+                  width: parent.width
+                  text: "Closed first · " + Model.consoleAppsLabel(root.consoleInfo)
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                  wrapMode: Text.WordWrap
+                }
+              }
+            }
+
+            EditorPane {
+              anchors.left: consoleSettingsPane.right
+              anchors.leftMargin: Style.space(10)
+              anchors.right: parent.right
+              anchors.top: parent.top
+              anchors.bottom: parent.bottom
+              title: "What happens"
+              foreground: root.foreground
+              dim: root.dim
+              accent: Color.accent
+              fontFamily: root.fontFamily
+
+              Column {
+                anchors.fill: parent
+                spacing: Style.space(10)
+
+                Text {
+                  textFormat: Text.PlainText
+                  width: parent.width
+                  text: root.consoleHosted
+                    ? "This session can switch."
+                    : "This session cannot switch. Run `hyprmoncfg console setup`, then log out and back in."
+                  color: root.consoleHosted ? root.foreground : root.urgent
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.body
+                  wrapMode: Text.WordWrap
+                }
+
+                Text {
+                  textFormat: Text.PlainText
+                  width: parent.width
+                  text: "Entering closes this desktop session and everything open in it. Anything listed above is asked to close first. You come back from Big Picture: Steam, then Power, then Switch to Desktop."
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                  wrapMode: Text.WordWrap
+                }
+
+                Text {
+                  textFormat: Text.PlainText
+                  width: parent.width
+                  text: "Resolution, HDR and the frame limiter are chosen per game inside Steam, not here. Sound follows the picture to the TV and comes back with you."
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                  wrapMode: Text.WordWrap
                 }
               }
             }

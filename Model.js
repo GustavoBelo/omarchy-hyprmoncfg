@@ -806,6 +806,47 @@ function consoleActionMethod(state) {
   return consoleArming(state) ? "console.cancel" : "console.enter"
 }
 
+// The option lists come from the daemon rather than being built here: which
+// connectors exist and which session entries are installed is something it
+// already knows, and a second copy in QML would be a second thing to keep true.
+function consoleDisplayOptions(state) {
+  var displays = (state && state.displays) || []
+  return displays.map(function(display) {
+    var connector = String(display.connector || "")
+    var description = String(display.description || "").trim()
+    return { value: connector, label: description === "" ? connector : connector + " · " + description }
+  })
+}
+
+function consoleBootOptions(state) {
+  var modes = (state && state.boot_modes) || []
+  var described = {
+    desktop: "Always the desktop",
+    console: "Always the console",
+    last: "Wherever you left off"
+  }
+  return modes.map(function(mode) {
+    var value = String(mode || "")
+    return { value: value, label: described[value] || value }
+  })
+}
+
+function consoleSessionOptions(state) {
+  var sessions = (state && state.desktop_sessions) || []
+  return sessions.map(function(session) {
+    return { value: String(session || ""), label: String(session || "").replace(/\.desktop$/, "") }
+  })
+}
+
+// consoleAppsLabel says how many applications get closed on the way in, since
+// the list itself is edited where there is room for it.
+function consoleAppsLabel(state) {
+  var apps = (state && state.apps_to_close) || []
+  if (apps.length === 0) return "Nothing is closed first"
+  if (apps.length === 1) return apps[0]
+  return apps.length + " applications"
+}
+
 // consoleActionEnabled keeps the row from offering something that will fail.
 function consoleActionEnabled(state) {
   if (consoleArming(state)) return true
@@ -879,6 +920,10 @@ if (typeof module !== "undefined") {
     consoleStatusLabel: consoleStatusLabel,
     consoleActionLabel: consoleActionLabel,
     consoleActionMethod: consoleActionMethod,
-    consoleActionEnabled: consoleActionEnabled
+    consoleActionEnabled: consoleActionEnabled,
+    consoleDisplayOptions: consoleDisplayOptions,
+    consoleBootOptions: consoleBootOptions,
+    consoleSessionOptions: consoleSessionOptions,
+    consoleAppsLabel: consoleAppsLabel
   }
 }

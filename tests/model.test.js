@@ -837,3 +837,43 @@ test("an action row can mark its subtitle as something to act on", () => {
   assert.match(qml, /urgent: modelData\.urgent === true/)
   assert.match(qml, /urgent: !root\.consoleArming && !root\.consoleHosted/)
 })
+
+// The panel offers the settings, so the daemon has to hand it the choices as
+// well as the current values: which connectors exist and which session entries
+// are installed is something it already knows, and a second copy in QML would
+// be a second thing to keep true.
+test("the console page offers the choices the daemon reports", () => {
+  const state = Model.consoleInfo({ console: {
+    configured: true, hosted: true, tv_name: "HDMI-A-1", boot: "last",
+    displays: [
+      { connector: "DP-1", description: "Technical Concepts Ltd 25G64" },
+      { connector: "HDMI-A-1", description: "Samsung SAMSUNG" }
+    ],
+    boot_modes: ["desktop", "console", "last"],
+    desktop_sessions: ["omarchy.desktop"],
+    apps_to_close: ["obsidian", "chromium"]
+  }})
+
+  const displays = Model.consoleDisplayOptions(state)
+  assert.equal(displays.length, 2)
+  assert.equal(displays[1].value, "HDMI-A-1")
+  assert.match(displays[1].label, /Samsung/)
+
+  // The boot modes are named for what they do, not for their config values.
+  const boot = Model.consoleBootOptions(state)
+  assert.deepEqual(boot.map(o => o.value), ["desktop", "console", "last"])
+  assert.match(boot[2].label, /left off/)
+
+  assert.equal(Model.consoleSessionOptions(state)[0].label, "omarchy")
+  assert.equal(Model.consoleAppsLabel(state), "2 applications")
+  assert.match(Model.consoleAppsLabel(Model.consoleInfo({ console: { apps_to_close: [] } })), /Nothing/)
+})
+
+test("the console page is a page, reachable the way the others are", () => {
+  const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
+  assert.match(qml, /value: "console", label: "4  Console"/)
+  assert.match(qml, /key === "4" && root\.consoleAvailable/)
+  assert.match(qml, /visible: root\.activePage === "console"/)
+  // Editing goes through the daemon, which owns the config file.
+  assert.match(qml, /root\.send\("console\.configure"/)
+})
