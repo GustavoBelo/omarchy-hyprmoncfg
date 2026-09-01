@@ -94,7 +94,7 @@ A fresh install takes `hyprmoncfg-bin`, the ready-made build; a machine that alr
 ## Requirements
 
 - Omarchy Quattro with third-party shell plugins
-- hyprmoncfg 1.16.0 or newer (installed from the panel when missing)
+- hyprmoncfg 1.17.0 or newer (installed from the panel when missing)
 
 ## Staying up to date
 
