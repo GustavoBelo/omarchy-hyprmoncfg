@@ -54,8 +54,8 @@ Item {
       contextual = [{
         title: "Workspaces",
         bindings: [
-          { keys: "↑  ↓", action: "Select a setting or display" },
-          { keys: "←  →", action: "Adjust it, or reorder displays" },
+          { keys: "↑  ↓", action: "Select a setting, workspace, or display" },
+          { keys: "←  →", action: "Adjust it, assign a workspace, or reorder displays" },
           { keys: "Enter, Space", action: "Advance the selected setting" }
         ]
       }]

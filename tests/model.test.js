@@ -257,6 +257,104 @@ test("expanded profile and workspace panes use daemon-owned documents", () => {
   ])
 })
 
+test("manual workspace assignments materialize the visible plan", () => {
+  const profile = {
+    outputs: [
+      { key: "desk", name: "DP-1", make: "Dell", model: "Desk", enabled: true },
+      { key: "side", name: "HDMI-A-1", make: "LG", model: "Side", enabled: true }
+    ],
+    workspaces: {
+      strategy: "sequential",
+      max_workspaces: 6,
+      group_size: 3,
+      monitor_order: ["desk", "side"]
+    }
+  }
+  const rules = Model.manualWorkspaceRulesFromPlan([
+    { output_key: "desk", workspaces: ["1", "2", "3"] },
+    { output_key: "side", workspaces: ["4", "5", "6"] }
+  ], profile)
+
+  assert.equal(rules.length, 6)
+  assert.deepEqual(rules.map(rule => rule.output_key), ["desk", "desk", "desk", "side", "side", "side"])
+  assert.equal(rules[0].default, true)
+  assert.equal(rules[0].persistent, true)
+  assert.equal(rules[1].default, false)
+  assert.equal(rules[3].default, true)
+
+  const disabledPlanRules = Model.manualWorkspaceRulesFromPlan([], profile)
+  assert.deepEqual(disabledPlanRules.map(rule => rule.output_key),
+    ["desk", "desk", "desk", "side", "side", "side"])
+
+  profile.workspaces.rules = rules
+  assert.deepEqual(Model.manualWorkspaceRows(profile).slice(0, 2), [
+    { workspace: "1", output_key: "desk", display_name: "Dell Desk" },
+    { workspace: "2", output_key: "desk", display_name: "Dell Desk" }
+  ])
+})
+
+test("manual workspace assignments cycle displays and resize numbered rules", () => {
+  const profile = {
+    outputs: [
+      { key: "off", name: "eDP-1", enabled: false },
+      { key: "desk", name: "DP-1", enabled: true },
+      { key: "mirror", name: "DP-2", enabled: true, mirror_of: "desk" },
+      { key: "side", name: "HDMI-A-1", enabled: true }
+    ],
+    workspaces: { monitor_order: ["off", "desk", "mirror", "side"] }
+  }
+  const initial = [
+    { workspace: "2", output_key: "desk", output_name: "DP-1" },
+    { workspace: "1", output_key: "desk", output_name: "DP-1" },
+    { workspace: "special:music", output_key: "side", output_name: "HDMI-A-1" }
+  ]
+
+  assert.deepEqual(Model.manualWorkspaceTargetKeys(profile), ["desk", "side"])
+  const moved = Model.cycleManualWorkspaceRule(initial, profile, 1, 1)
+  assert.equal(moved[1].workspace, "2")
+  assert.equal(moved[1].output_key, "side")
+  assert.equal(moved[0].default, true)
+  assert.equal(moved[1].default, true)
+
+  const grown = Model.resizeManualWorkspaceRules(moved, profile, 3)
+  assert.deepEqual(grown.map(rule => rule.workspace), ["1", "2", "3", "special:music"])
+  assert.equal(grown[2].output_key, "desk")
+  assert.equal(Model.manualWorkspaceCount({ max_workspaces: 9, rules: grown }), 3)
+
+  const shrunk = Model.resizeManualWorkspaceRules(grown, profile, 2)
+  assert.deepEqual(shrunk.map(rule => rule.workspace), ["1", "2", "special:music"])
+})
+
+test("workspace planning has no legacy 10 or 30 workspace ceiling", () => {
+  const profile = {
+    outputs: [
+      { key: "desk", name: "DP-1", enabled: true },
+      { key: "side", name: "HDMI-A-1", enabled: true }
+    ],
+    workspaces: {
+      strategy: "sequential",
+      max_workspaces: 64,
+      group_size: 40,
+      monitor_order: ["desk", "side"]
+    }
+  }
+
+  const generated = Model.manualWorkspaceRulesFromPlan([], profile)
+  assert.equal(generated.length, 64)
+  assert.deepEqual(generated.slice(0, 40).map(rule => rule.output_key),
+    Array(40).fill("desk"))
+  assert.deepEqual(generated.slice(40).map(rule => rule.output_key),
+    Array(24).fill("side"))
+
+  const resized = Model.resizeManualWorkspaceRules([], profile, 64)
+  assert.equal(resized.length, 64)
+
+  const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
+  assert.match(qml, /readonly property int workspaceValueMaximum: 2147483647/)
+  assert.equal((qml.match(/to: root\.workspaceValueMaximum/g) || []).length, 2)
+  assert.doesNotMatch(qml, /to: (10|30)\b/)
+})
+
 test("the daemon's exact display match drives contextual profile onboarding", () => {
   const exact = { name: "Desk", exact_display_match: true, recommended: true }
   const activeExact = { name: "Desk fallback", exact_display_match: true, active: true }
@@ -379,12 +477,30 @@ test("the panel has management-first compact mode and a TUI-shaped expanded mode
   assert.match(qml, /title: "Workspace Planner"/)
   assert.match(qml, /DisplayCanvas \{/)
   assert.match(qml, /root\.editOutput\(\{ mode: value \}\)/)
-  assert.match(qml, /root\.editWorkspaces\(\{ strategy: value \}\)/)
+  assert.match(qml, /root\.changeWorkspaceStrategy\(value\)/)
+  assert.match(qml, /"WORKSPACE → DISPLAY"/)
+  assert.match(qml, /root\.moveManualWorkspace\(index, -1\)/)
+  assert.match(qml, /root\.moveManualWorkspace\(index, 1\)/)
+  assert.match(qml, /function ensureManualWorkspaceRules\(\)/)
+  assert.match(qml, /selectedKey: root\.selectedWorkspaceDisplayKey/)
+  assert.doesNotMatch(qml, /full TUI remains available for editing individual rules/)
   assert.doesNotMatch(qml, /text: "Preview profile"/)
   assert.match(qml, /centerOnBar: false/)
   assert.match(qml, /fontSize: Style\.font\.caption/)
   assert.doesNotMatch(qml, /ProfileRow/)
   assert.match(qml, /match_score/)
+})
+
+test("the workspace form hides irrelevant group size and adapts keyboard navigation", () => {
+  const qml = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
+
+  assert.match(qml, /readonly property bool workspaceGroupSizeApplicable: root\.workspaceStrategy === "sequential"/)
+  assert.match(qml, /id: workspaceGroupSizeField\s+visible: root\.workspaceGroupSizeApplicable/)
+  assert.match(qml, /width: root\.workspaceGroupSizeApplicable\s+\? \(parent\.width - parent\.spacing\) \/ 2 : parent\.width/)
+  // Hiding Group Size also removes its keyboard stop; assignment rows move up.
+  assert.match(qml, /readonly property int workspaceListKeyboardStart: root\.workspaceGroupSizeApplicable \? 4 : 3/)
+  assert.match(qml, /root\.workspaceKeyboardIndex === root\.workspaceListKeyboardStart \+ index/)
+  assert.doesNotMatch(qml, /root\.workspaceKeyboardIndex === 4 \+ index/)
 })
 
 test("the compact profile is stable status with contextual actions, not a selector", () => {

@@ -619,6 +619,169 @@ function profileUpdatedLabel(value) {
     + " " + pad(date.getHours()) + ":" + pad(date.getMinutes())
 }
 
+function workspaceRuleNumber(value) {
+  var text = String(value || "").trim()
+  return /^[1-9][0-9]*$/.test(text) ? Number(text) : 0
+}
+
+function sortedManualWorkspaceRules(rules) {
+  var items = rules instanceof Array ? clone(rules) || [] : []
+  items.sort(function(left, right) {
+    var leftNumber = workspaceRuleNumber((left || {}).workspace)
+    var rightNumber = workspaceRuleNumber((right || {}).workspace)
+    if (leftNumber > 0 && rightNumber > 0) return leftNumber - rightNumber
+    if (leftNumber > 0) return -1
+    if (rightNumber > 0) return 1
+    var leftName = String((left || {}).workspace || "")
+    var rightName = String((right || {}).workspace || "")
+    return leftName < rightName ? -1 : (leftName > rightName ? 1 : 0)
+  })
+  return items
+}
+
+function manualWorkspaceTargetKeys(profile) {
+  var settings = (profile || {}).workspaces || {}
+  var order = settings.monitor_order instanceof Array ? settings.monitor_order : []
+  var outputs = profile && profile.outputs instanceof Array ? profile.outputs : []
+  var keys = []
+  var seen = ({})
+
+  function add(key) {
+    var value = String(key || "")
+    var output = outputByKey(profile, value)
+    if (value === "" || seen["key:" + value] || !output
+        || output.enabled === false || mirrorTarget(output) !== "") return
+    keys.push(value)
+    seen["key:" + value] = true
+  }
+
+  for (var i = 0; i < order.length; i++) add(order[i])
+  for (var j = 0; j < outputs.length; j++) add((outputs[j] || {}).key)
+  return keys
+}
+
+function normalizeManualWorkspaceDefaults(rules) {
+  var items = sortedManualWorkspaceRules(rules)
+  var seen = ({})
+  for (var i = 0; i < items.length; i++) {
+    var rule = items[i] || {}
+    var target = String(rule.output_key || rule.output_name || "")
+    rule.default = false
+    rule.persistent = false
+    if (target !== "" && !seen["key:" + target]) {
+      rule.default = true
+      rule.persistent = true
+      seen["key:" + target] = true
+    }
+    items[i] = rule
+  }
+  return items
+}
+
+function manualWorkspaceRulesFromPlan(plan, profile) {
+  var rows = plan instanceof Array ? plan : []
+  var rules = []
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i] || {}
+    var key = String(row.output_key || "")
+    var workspaces = row.workspaces instanceof Array ? row.workspaces : []
+    for (var j = 0; j < workspaces.length; j++) {
+      rules.push({
+        workspace: String(workspaces[j] || ""),
+        output_key: key,
+        output_name: outputName(profile, key)
+      })
+    }
+  }
+  if (rules.length > 0) return normalizeManualWorkspaceDefaults(rules)
+
+  // A disabled planner has no daemon plan to materialize. Recreate the plan
+  // from its saved generated settings so switching to manual still starts
+  // from what the user configured rather than an empty list.
+  var settings = (profile || {}).workspaces || {}
+  var keys = manualWorkspaceTargetKeys(profile)
+  var maximum = Math.max(1, Math.floor(Number(settings.max_workspaces || 9)))
+  var groupSize = Math.max(1, Number(settings.group_size || 3))
+  var interleave = String(settings.strategy || "") === "interleave"
+  for (var workspace = 1; workspace <= maximum && keys.length > 0; workspace++) {
+    var targetIndex = interleave
+      ? (workspace - 1) % keys.length
+      : Math.floor((workspace - 1) / groupSize) % keys.length
+    var target = keys[targetIndex]
+    rules.push({
+      workspace: String(workspace),
+      output_key: target,
+      output_name: outputName(profile, target)
+    })
+  }
+  return normalizeManualWorkspaceDefaults(rules)
+}
+
+function manualWorkspaceRows(profile) {
+  var settings = (profile || {}).workspaces || {}
+  var rules = sortedManualWorkspaceRules(settings.rules)
+  return rules.map(function(rule) {
+    var item = rule || {}
+    var key = String(item.output_key || "")
+    var label = key !== "" ? outputDisplayLabel(profile, key) : String(item.output_name || "Display")
+    return {
+      workspace: String(item.workspace || "?"),
+      output_key: key,
+      display_name: label
+    }
+  })
+}
+
+function manualWorkspaceCount(settings) {
+  var value = settings || {}
+  var rules = value.rules instanceof Array ? value.rules : []
+  var maximum = 0
+  for (var i = 0; i < rules.length; i++) {
+    maximum = Math.max(maximum, workspaceRuleNumber((rules[i] || {}).workspace))
+  }
+  return maximum > 0 ? maximum : Math.max(1, Number(value.max_workspaces || 9))
+}
+
+function resizeManualWorkspaceRules(rules, profile, maximum) {
+  var limit = Math.max(1, Math.floor(Number(maximum || 1)))
+  var current = sortedManualWorkspaceRules(rules)
+  var numbered = ({})
+  var named = []
+  for (var i = 0; i < current.length; i++) {
+    var number = workspaceRuleNumber((current[i] || {}).workspace)
+    if (number > 0 && number <= limit) numbered[String(number)] = current[i]
+    else if (number === 0) named.push(current[i])
+  }
+
+  var keys = manualWorkspaceTargetKeys(profile)
+  var resized = []
+  for (var workspace = 1; workspace <= limit; workspace++) {
+    var rule = numbered[String(workspace)] || { workspace: String(workspace) }
+    if (!rule.output_key && keys.length > 0) {
+      rule.output_key = keys[0]
+      rule.output_name = outputName(profile, keys[0])
+    }
+    resized.push(rule)
+  }
+  return normalizeManualWorkspaceDefaults(resized.concat(named))
+}
+
+function cycleManualWorkspaceRule(rules, profile, rowIndex, delta) {
+  var items = sortedManualWorkspaceRules(rules)
+  var index = Number(rowIndex || 0)
+  var keys = manualWorkspaceTargetKeys(profile)
+  if (index < 0 || index >= items.length || keys.length === 0) return items
+
+  var rule = items[index] || {}
+  var current = keys.indexOf(String(rule.output_key || ""))
+  if (current < 0) current = Number(delta || 0) < 0 ? 0 : -1
+  var target = keys[wrapIndex(current + Number(delta || 0), keys.length)]
+  rule.output_key = target
+  rule.output_name = outputName(profile, target)
+  items[index] = rule
+  return normalizeManualWorkspaceDefaults(items)
+}
+
 function workspacePlanRows(plan, profile) {
   var rows = plan instanceof Array ? plan : []
   return rows.map(function(row) {
@@ -795,6 +958,12 @@ if (typeof module !== "undefined") {
     profileMatchReasonRows: profileMatchReasonRows,
     profileHiddenDisplayRows: profileHiddenDisplayRows,
     profileUpdatedLabel: profileUpdatedLabel,
+    manualWorkspaceTargetKeys: manualWorkspaceTargetKeys,
+    manualWorkspaceRulesFromPlan: manualWorkspaceRulesFromPlan,
+    manualWorkspaceRows: manualWorkspaceRows,
+    manualWorkspaceCount: manualWorkspaceCount,
+    resizeManualWorkspaceRules: resizeManualWorkspaceRules,
+    cycleManualWorkspaceRule: cycleManualWorkspaceRule,
     workspacePlanRows: workspacePlanRows,
     enabledOutputCount: enabledOutputCount,
     layoutMetrics: layoutMetrics,

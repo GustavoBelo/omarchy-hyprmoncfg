@@ -44,6 +44,7 @@ Panel {
   property string keyboardLayoutPane: "canvas"
   property int keyboardInspectorField: 0
   property int workspaceKeyboardIndex: 0
+  property bool manualWorkspaceRulesInitialized: false
   property bool execEditing: false
   property string execDraft: ""
 
@@ -207,6 +208,9 @@ Panel {
   readonly property color dim: Qt.darker(foreground, 1.5)
   readonly property color urgent: bar ? bar.urgent : Color.urgent
   readonly property real unmanagedOpacity: 0.45
+  // NumberField is backed by a QML int. Keep only that technical boundary;
+  // workspace planning itself has no product-level maximum.
+  readonly property int workspaceValueMaximum: 2147483647
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property var selectedOutput: Model.outputByKey(root.draftProfile, root.selectedOutputKey)
   readonly property var selectedOutputMetadata: Model.editorMetadata(root.editorDocument.displays, root.selectedOutputKey)
@@ -227,6 +231,22 @@ Panel {
     + root.selectedSavedHiddenRows.length
     + Math.max(1, root.selectedSavedWorkspaceRows.length)
   readonly property var workspaceRows: Model.workspacePlanRows(root.workspacePlan, root.draftProfile)
+  readonly property var manualWorkspaceRows: Model.manualWorkspaceRows(root.draftProfile)
+  readonly property int manualWorkspaceTargetCount: Model.manualWorkspaceTargetKeys(root.draftProfile).length
+  readonly property string workspaceStrategy: String(((root.draftProfile || {}).workspaces || {}).strategy || "manual")
+  readonly property bool workspaceGroupSizeApplicable: root.workspaceStrategy === "sequential"
+  readonly property int workspaceListKeyboardStart: root.workspaceGroupSizeApplicable ? 4 : 3
+  readonly property string selectedWorkspaceDisplayKey: {
+    var index = root.workspaceKeyboardIndex - root.workspaceListKeyboardStart
+    if (index < 0) return ""
+    var settings = (root.draftProfile || {}).workspaces || {}
+    if (String(settings.strategy || "") === "manual") {
+      if (index >= root.manualWorkspaceRows.length) return ""
+      return String((root.manualWorkspaceRows[index] || {}).output_key || "")
+    }
+    var order = settings.monitor_order instanceof Array ? settings.monitor_order : []
+    return index < order.length ? String(order[index] || "") : ""
+  }
   readonly property var pageOptions: [
     { value: "layout", label: "1  Layout" },
     { value: "profiles", label: "2  Profiles" },
@@ -460,6 +480,9 @@ Panel {
     root.editorDocument = value
     root.draftProfile = Model.clone(value.profile)
     root.workspacePlan = value.workspace_plan instanceof Array ? value.workspace_plan : []
+    var workspaceSettings = (root.draftProfile || {}).workspaces || {}
+    root.manualWorkspaceRulesInitialized = String(workspaceSettings.strategy || "") === "manual"
+      && workspaceSettings.rules instanceof Array && workspaceSettings.rules.length > 0
     root.sourceProfile = String(value.source_profile || "")
     root.suggestedProfile = String(value.suggested_profile || "")
     root.selectedOutputKey = Model.initialOutputKey(root.draftProfile, value.displays)
@@ -473,6 +496,10 @@ Panel {
     root.editPending = false
     root.draftDirty = false
     root.creatingProfile = false
+    Qt.callLater(function() {
+      root.normalizeWorkspaceCursor()
+      if (root.activePage === "workspaces") root.ensureManualWorkspaceRules()
+    })
   }
 
   function editDraft(edit) {
@@ -493,6 +520,53 @@ Panel {
     var changes = fields || {}
     for (var key in changes) settings[key] = changes[key]
     root.editDraft({ workspaces: settings })
+  }
+
+  function changeWorkspaceStrategy(value) {
+    var settings = Model.clone((root.draftProfile || {}).workspaces || {}) || {}
+    var current = String(settings.strategy || "manual")
+    var next = String(value || "manual")
+    var changes = { strategy: next }
+    if (next === "manual" && current !== "manual" && !root.manualWorkspaceRulesInitialized) {
+      changes.rules = Model.manualWorkspaceRulesFromPlan(root.workspacePlan, root.draftProfile)
+      root.manualWorkspaceRulesInitialized = changes.rules.length > 0
+    }
+    root.editWorkspaces(changes)
+  }
+
+  function setWorkspaceCount(value) {
+    var settings = Model.clone((root.draftProfile || {}).workspaces || {}) || {}
+    var maximum = Math.floor(root.bounded(Number(value || 1), 1, root.workspaceValueMaximum))
+    if (String(settings.strategy || "") === "manual") {
+      root.editWorkspaces({
+        max_workspaces: maximum,
+        rules: Model.resizeManualWorkspaceRules(settings.rules, root.draftProfile, maximum)
+      })
+      root.manualWorkspaceRulesInitialized = true
+      return
+    }
+    root.editWorkspaces({ max_workspaces: maximum })
+  }
+
+  function moveManualWorkspace(row, delta) {
+    var settings = Model.clone((root.draftProfile || {}).workspaces || {}) || {}
+    root.workspaceKeyboardIndex = root.workspaceListKeyboardStart + Number(row || 0)
+    root.editWorkspaces({
+      rules: Model.cycleManualWorkspaceRule(settings.rules, root.draftProfile, row, delta)
+    })
+    root.manualWorkspaceRulesInitialized = true
+  }
+
+  function ensureManualWorkspaceRules() {
+    if (!root.managedChecked || !root.editorReady || root.editPending
+        || root.previewTransaction !== "") return
+    var settings = Model.clone((root.draftProfile || {}).workspaces || {}) || {}
+    if (String(settings.strategy || "") !== "manual"
+        || (settings.rules instanceof Array && settings.rules.length > 0)) return
+    var rules = Model.manualWorkspaceRulesFromPlan(root.workspacePlan, root.draftProfile)
+    if (rules.length === 0) return
+    root.manualWorkspaceRulesInitialized = true
+    root.editWorkspaces({ rules: rules })
   }
 
   function moveWorkspaceMonitor(key, delta) {
@@ -640,6 +714,9 @@ Panel {
     if (!root.selectedSavedProfile) return
     root.draftProfile = Model.clone(root.selectedSavedProfile)
     root.workspacePlan = Model.clone(root.selectedSavedWorkspacePlan) || []
+    var workspaceSettings = (root.draftProfile || {}).workspaces || {}
+    root.manualWorkspaceRulesInitialized = String(workspaceSettings.strategy || "") === "manual"
+      && workspaceSettings.rules instanceof Array && workspaceSettings.rules.length > 0
     root.sourceProfile = root.selectedSavedProfileName
     root.saveName = root.selectedSavedProfileName
     root.selectedOutputKey = Model.initialOutputKey(root.draftProfile, root.editorDocument.displays)
@@ -677,13 +754,29 @@ Panel {
   }
 
   function workspaceKeyboardCount() {
-    var order = ((root.draftProfile || {}).workspaces || {}).monitor_order || []
-    return 4 + order.length
+    var settings = ((root.draftProfile || {}).workspaces || {})
+    if (root.workspaceStrategy === "manual")
+      return root.workspaceListKeyboardStart + root.manualWorkspaceRows.length
+    var order = settings.monitor_order || []
+    return root.workspaceListKeyboardStart + order.length
+  }
+
+  function normalizeWorkspaceCursor() {
+    root.workspaceKeyboardIndex = Model.wrapIndex(
+      root.workspaceKeyboardIndex, root.workspaceKeyboardCount())
+    if (manualAssignmentList.visible
+        && root.workspaceKeyboardIndex >= root.workspaceListKeyboardStart)
+      manualAssignmentList.positionViewAtIndex(
+        root.workspaceKeyboardIndex - root.workspaceListKeyboardStart, ListView.Contain)
   }
 
   function moveWorkspaceCursor(delta) {
     root.workspaceKeyboardIndex = Model.wrapIndex(
       root.workspaceKeyboardIndex + delta, root.workspaceKeyboardCount())
+    if (manualAssignmentList.visible
+        && root.workspaceKeyboardIndex >= root.workspaceListKeyboardStart)
+      manualAssignmentList.positionViewAtIndex(
+        root.workspaceKeyboardIndex - root.workspaceListKeyboardStart, ListView.Contain)
   }
 
   function adjustWorkspaceKeyboard(delta) {
@@ -691,23 +784,30 @@ Panel {
     var settings = Model.clone((root.draftProfile || {}).workspaces || {}) || {}
     var index = root.workspaceKeyboardIndex
     if (index === 0) root.editWorkspaces({ enabled: !settings.enabled })
-    else if (index === 1) root.editWorkspaces({
-      strategy: Model.cycleOptionValue(["manual", "sequential", "interleave"],
-        String(settings.strategy || "manual"), delta)
-    })
-    else if (index === 2) root.editWorkspaces({
-      max_workspaces: root.bounded(Number(settings.max_workspaces || 9) + delta, 1, 30)
-    })
-    else if (index === 3) root.editWorkspaces({
-      group_size: root.bounded(Number(settings.group_size || 3) + delta, 1, 10)
-    })
+    else if (index === 1) root.changeWorkspaceStrategy(
+      Model.cycleOptionValue(["manual", "sequential", "interleave"],
+        String(settings.strategy || "manual"), delta))
+    else if (index === 2) root.setWorkspaceCount(
+      (String(settings.strategy || "") === "manual"
+        ? Model.manualWorkspaceCount(settings)
+        : Number(settings.max_workspaces || 9)) + delta)
+    else if (index === 3 && root.workspaceGroupSizeApplicable) {
+      root.editWorkspaces({
+        group_size: Math.floor(root.bounded(Number(settings.group_size || 3) + delta,
+          1, root.workspaceValueMaximum))
+      })
+    }
     else {
+      if (String(settings.strategy || "") === "manual") {
+        root.moveManualWorkspace(index - root.workspaceListKeyboardStart, delta)
+        return
+      }
       var order = settings.monitor_order instanceof Array ? settings.monitor_order : []
-      var orderIndex = index - 4
+      var orderIndex = index - root.workspaceListKeyboardStart
       var target = orderIndex + delta
       if (orderIndex < 0 || orderIndex >= order.length || target < 0 || target >= order.length) return
       root.moveWorkspaceMonitor(String(order[orderIndex] || ""), delta)
-      root.workspaceKeyboardIndex = 4 + target
+      root.workspaceKeyboardIndex = root.workspaceListKeyboardStart + target
     }
   }
 
@@ -1067,6 +1167,10 @@ Panel {
       root.workspacePlan = result.workspace_plan instanceof Array ? result.workspace_plan : []
       root.editPending = false
       root.draftDirty = true
+      Qt.callLater(function() {
+        root.normalizeWorkspaceCursor()
+        if (root.activePage === "workspaces") root.ensureManualWorkspaceRules()
+      })
     } else if (method === "preview") {
       var transaction = envelope.result || {}
       root.previewTransaction = String(transaction.id || "")
@@ -1164,6 +1268,10 @@ Panel {
   }
 
   Component.onCompleted: root.checkInstallation()
+  onActivePageChanged: {
+    if (root.activePage === "workspaces")
+      Qt.callLater(function() { root.ensureManualWorkspaceRules() })
+  }
 
   Connections {
     target: root.previewCoordinator
@@ -3067,7 +3175,7 @@ Panel {
                     && root.workspaceKeyboardIndex === 1
                   foreground: root.foreground
                   fontFamily: root.fontFamily
-                  onChanged: function(value) { root.editWorkspaces({ strategy: value }) }
+                  onChanged: function(value) { root.changeWorkspaceStrategy(value) }
                 }
 
                 Row {
@@ -3076,30 +3184,36 @@ Panel {
 
                   NumberField {
                     id: workspaceCountField
-                    width: (parent.width - parent.spacing) / 2
+                    width: root.workspaceGroupSizeApplicable
+                      ? (parent.width - parent.spacing) / 2 : parent.width
                     fieldWidth: width
                     label: "WORKSPACES"
                     from: 1
-                    to: 30
-                    value: Number(((root.draftProfile || {}).workspaces || {}).max_workspaces || 9)
+                    to: root.workspaceValueMaximum
+                    value: String(((root.draftProfile || {}).workspaces || {}).strategy || "") === "manual"
+                      ? Model.manualWorkspaceCount((root.draftProfile || {}).workspaces || {})
+                      : Number(((root.draftProfile || {}).workspaces || {}).max_workspaces || 9)
                     enabled: !root.editPending
                     hasCursor: root.expanded && root.activePage === "workspaces"
                       && root.workspaceKeyboardIndex === 2
                     foreground: root.foreground
                     fontFamily: root.fontFamily
                     onModified: function(value) {
-                      root.editWorkspaces({ max_workspaces: value })
-                      Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+                      var returnToKeyboard = workspaceCountField.field.activeFocus
+                      if (!root.editPending) root.setWorkspaceCount(value)
+                      if (returnToKeyboard)
+                        Qt.callLater(function() { keyCatcher.forceActiveFocus() })
                     }
                   }
 
                   NumberField {
                     id: workspaceGroupSizeField
+                    visible: root.workspaceGroupSizeApplicable
                     width: (parent.width - parent.spacing) / 2
                     fieldWidth: width
                     label: "GROUP SIZE"
                     from: 1
-                    to: 10
+                    to: root.workspaceValueMaximum
                     value: Number(((root.draftProfile || {}).workspaces || {}).group_size || 3)
                     enabled: !root.editPending
                       && String(((root.draftProfile || {}).workspaces || {}).strategy || "") === "sequential"
@@ -3112,18 +3226,21 @@ Panel {
                       Qt.callLater(function() { keyCatcher.forceActiveFocus() })
                     }
                   }
+
                 }
 
                 PanelSeparator { foreground: root.foreground }
 
                 PanelSectionHeader {
-                  text: "MONITOR ORDER"
+                  text: String(((root.draftProfile || {}).workspaces || {}).strategy || "") === "manual"
+                    ? "WORKSPACE → DISPLAY" : "MONITOR ORDER"
                   foreground: root.foreground
                   fontFamily: root.fontFamily
                 }
 
                 Repeater {
-                  model: ((root.draftProfile || {}).workspaces || {}).monitor_order || []
+                  model: String(((root.draftProfile || {}).workspaces || {}).strategy || "") === "manual"
+                    ? [] : (((root.draftProfile || {}).workspaces || {}).monitor_order || [])
 
                   BorderSurface {
                     required property var modelData
@@ -3131,7 +3248,8 @@ Panel {
                     width: parent.width
                     height: Style.space(42)
                     readonly property bool hasKeyboardCursor: root.expanded
-                      && root.activePage === "workspaces" && root.workspaceKeyboardIndex === 4 + index
+                      && root.activePage === "workspaces"
+                      && root.workspaceKeyboardIndex === root.workspaceListKeyboardStart + index
                     color: hasKeyboardCursor
                       ? Style.selectedFillFor(root.foreground, Color.accent)
                       : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.025)
@@ -3182,15 +3300,93 @@ Panel {
                   }
                 }
 
-                Text {
-                  textFormat: Text.PlainText
+                ListView {
+                  id: manualAssignmentList
                   visible: String(((root.draftProfile || {}).workspaces || {}).strategy || "") === "manual"
                   width: parent.width
-                  text: "Manual rules are preserved. The full TUI remains available for editing individual rules."
-                  color: root.dim
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.bodySmall
-                  wrapMode: Text.WordWrap
+                  height: visible ? Math.max(Style.space(90), parent.height - y) : 0
+                  clip: true
+                  spacing: Style.space(6)
+                  boundsBehavior: Flickable.StopAtBounds
+                  model: visible ? root.manualWorkspaceRows : []
+                  currentIndex: root.workspaceKeyboardIndex >= root.workspaceListKeyboardStart
+                    ? root.workspaceKeyboardIndex - root.workspaceListKeyboardStart : -1
+                  ScrollBar.vertical: ScrollBar {
+                    id: manualScrollBar
+                    policy: ScrollBar.AsNeeded
+                  }
+
+                  delegate: BorderSurface {
+                    required property var modelData
+                    required property int index
+                    width: manualAssignmentList.width - (manualScrollBar.visible
+                      ? manualScrollBar.width + Style.space(4) : 0)
+                    height: Style.space(42)
+                    readonly property bool hasKeyboardCursor: root.expanded
+                      && root.activePage === "workspaces"
+                      && root.workspaceKeyboardIndex === root.workspaceListKeyboardStart + index
+                    color: hasKeyboardCursor
+                      ? Style.selectedFillFor(root.foreground, Color.accent)
+                      : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.025)
+                    borderSpec: Border.controlSpec(hasKeyboardCursor ? "focus" : "normal",
+                      root.foreground, Color.accent)
+                    radius: Style.cornerRadius
+
+                    Row {
+                      anchors.fill: parent
+                      anchors.leftMargin: Style.space(10)
+                      anchors.rightMargin: Style.space(6)
+                      spacing: Style.space(6)
+
+                      Text {
+                        id: manualWorkspaceLabel
+                        textFormat: Text.PlainText
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Style.space(82)
+                        text: "Workspace " + String(modelData.workspace || "?")
+                        color: root.dim
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.bodySmall
+                        elide: Text.ElideRight
+                      }
+
+                      Text {
+                        textFormat: Text.PlainText
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: parent.width - manualWorkspaceLabel.width
+                          - manualLeft.width - manualRight.width - parent.spacing * 3
+                        text: String(modelData.display_name || "Display")
+                        color: root.foreground
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.body
+                        font.bold: root.expanded && root.activePage === "workspaces"
+                          && root.workspaceKeyboardIndex === root.workspaceListKeyboardStart + index
+                        elide: Text.ElideRight
+                      }
+
+                      Button {
+                        id: manualLeft
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "←"
+                        bordered: true
+                        enabled: root.manualWorkspaceTargetCount > 1 && !root.editPending
+                        foreground: root.foreground
+                        fontFamily: root.fontFamily
+                        onClicked: root.moveManualWorkspace(index, -1)
+                      }
+
+                      Button {
+                        id: manualRight
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "→"
+                        bordered: true
+                        enabled: root.manualWorkspaceTargetCount > 1 && !root.editPending
+                        foreground: root.foreground
+                        fontFamily: root.fontFamily
+                        onClicked: root.moveManualWorkspace(index, 1)
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -3254,7 +3450,7 @@ Panel {
                   editorDisplays: root.editorDocument.displays
                   workspacePlan: root.workspacePlan
                   emphasis: "workspaces"
-                  selectedKey: ""
+                  selectedKey: root.selectedWorkspaceDisplayKey
                   interactive: false
                   detailed: true
                   framed: false
