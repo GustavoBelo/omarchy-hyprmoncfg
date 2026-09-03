@@ -5,7 +5,7 @@
   "version": "2.3.0",
   "author": "Gustavo Belo (fork of Carmine Paolino's hyprmoncfg panel)",
   "license": "MIT",
-  "description": "Plug your monitors in and the right layout comes back. Save a profile per setup and hyprmoncfg applies it automatically on hotplug, on lid open and close, and after suspend. Layout editor with per-display brightness, snapping, per-output scale and sharpness checking, HDR, wide gamut and ICC colour management, mirroring, rotation, and a workspace planner. Profiles match monitors by make, model and serial rather than the port they are plugged into, so moving a cable does not break your layout.",
+  "description": "Plug your monitors in and the right layout comes back. Save a profile per setup and hyprmoncfg applies it automatically on hotplug, on lid open and close, and after suspend. Layout editor with per-display brightness, snapping, per-output scale and sharpness checking, HDR, wide gamut and ICC colour management, mirroring, rotation, and a workspace planner. Profiles match monitors by make, model and serial rather than the port they are plugged into, so moving a cable does not break your layout. Console mode hands the machine to Steam's gamescope session on the TV and takes it back when you leave Big Picture, without a terminal.",
   "kinds": [
     "bar-widget",
     "service"
