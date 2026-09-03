@@ -66,6 +66,9 @@ A small background service is what watches for this. It catches hotplug, lid and
 
 - A workspace planner that lays your workspaces out across the displays in a profile: manual, sequential, or interleaved
 - Set how many workspaces there are, how they group, and the monitor order they follow
+- Workspace and group counts have no fixed product cap; type an exact large value directly
+- Group size appears only for Sequential plans; type an exact workspace count and press `Enter`
+- In manual mode, move each numbered workspace directly between displays with the row arrows or keyboard
 - Per-monitor workspace rules, saved with the profile and applied with it
 
 ## Install
