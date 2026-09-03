@@ -3767,6 +3767,12 @@ Panel {
         root.cursorActive = true
         root.cursorIndex = actionRow.rowIndex
       }
+      // The cursor is shared with the keyboard, so only the row still holding
+      // it may give it back. Leaving a row the keyboard has already moved on
+      // from must not blank the highlight that is now somewhere else.
+      onExited: {
+        if (root.cursorIndex === actionRow.rowIndex) root.cursorActive = false
+      }
       onClicked: actionRow.activated()
     }
 
