@@ -4,7 +4,15 @@ An Omarchy bar panel for [hyprmoncfg](https://hyprmoncfg.dev/). Create multi-mon
 
 ![hyprmoncfg for Omarchy](preview.png)
 
-Version 2.0 brings the panel to practical feature parity with the TUI for monitor layouts, profiles, and workspace planning—and then goes further with direct pointer-driven arrangement and per-display brightness. The compact view keeps the everyday controls close; expand it for the complete spatial editor. The TUI remains available for a keyboard-first or standalone workflow.
+> [!NOTE]
+> **This is a fork of [crmne/omarchy-hyprmoncfg](https://github.com/crmne/omarchy-hyprmoncfg) that adds the Console page.**
+>
+> Everything the upstream panel does, this does. What it adds is one page: hand
+> the machine to Steam's gamescope session on the TV and take it back, without a
+> terminal. It needs [this fork of hyprmoncfg](https://github.com/GustavoBelo/hyprmoncfg) —
+> see [Requirements](#requirements).
+
+The panel is at practical feature parity with the TUI for monitor layouts, profiles, and workspace planning—and then goes further with direct pointer-driven arrangement and per-display brightness. The compact view keeps the everyday controls close; expand it for the complete spatial editor. The TUI remains available for a keyboard-first or standalone workflow.
 
 <details>
 <summary>See the expanded editor</summary>
@@ -36,7 +44,7 @@ A small background service is what watches for this. It catches hotplug, lid and
 
 **Keyboard controls**
 
-- The expanded panel mirrors the TUI shortcuts: `1`/`2`/`3` switch pages, `a` applies, `s` saves, `r` resets, and `?` shows the contextual key guide
+- The expanded panel mirrors the TUI shortcuts: `1`/`2`/`3` switch pages — `4` as well once the Console page is available — `a` applies, `s` saves, `r` resets, and `?` shows the contextual key guide
 - On the layout, arrows move the selected display; `Shift`, `Ctrl`, and `Alt` preserve the TUI's fine movement and nearest-display snapping
 - Profile browsing and workspace settings use the same arrow, Enter, load, edit, and delete keys as the TUI
 
@@ -71,6 +79,35 @@ A small background service is what watches for this. It catches hotplug, lid and
 - In manual mode, move each numbered workspace directly between displays with the row arrows or keyboard
 - Per-monitor workspace rules, saved with the profile and applied with it
 
+**Console Mode** *(this fork)*
+
+- A **Console Mode** row in the compact view, which appears once a TV has been chosen and hands the machine over in one click
+- A **Console** page in the expanded panel: the display it plays on, where the machine starts, the session it comes back to, and whether a controller switching on starts a session
+- The row turns urgent when the session cannot switch, and flips to **Keep the desktop** while a countdown is running, so the same click that started it calls it off
+
+## Console Mode
+
+Console Mode closes the desktop and starts Steam's gamescope session on the TV;
+leaving Big Picture brings the desktop back. It is not Big Picture in a window —
+gamescope becomes the compositor, which is where per-game HDR, VRR, FSR and the
+frame limiter come from. The price is that your desktop is gone while you play.
+
+The panel is the whole interface for it. The compact view carries a **Console
+Mode** row alongside the other things you do; the expanded **Console** page picks
+the display, the boot behaviour and the session to return to, from lists the
+daemon supplies rather than a second copy kept here.
+
+Entering is armed in the daemon rather than in the panel, because the countdown
+has to outlive whatever asked for it — this panel closes with the rest of the
+desktop the moment the console starts. That is also what lets the row become
+**Keep the desktop** while the countdown runs: clicking it cancels.
+
+The Console page only appears when the machine can actually use it. Setting it
+up once needs a terminal — `hyprmoncfg console setup` prints the change your
+login manager needs and `hyprmoncfg console doctor` says what is still missing.
+The [Console Mode guide](https://github.com/GustavoBelo/hyprmoncfg/blob/main/docs/_guide/console-mode.md)
+has the full walkthrough.
+
 ## Install
 
 ```sh
@@ -98,6 +135,14 @@ A fresh install takes `hyprmoncfg-bin`, the ready-made build; a machine that alr
 
 - Omarchy Quattro with third-party shell plugins
 - hyprmoncfg 1.17.0 or newer (installed from the panel when missing)
+- For the Console page, [this fork of hyprmoncfg](https://github.com/GustavoBelo/hyprmoncfg)
+
+> [!IMPORTANT]
+> **Install hyprmoncfg** in the panel fetches `hyprmoncfg-bin` from the AUR,
+> which is upstream's build and does not carry Console Mode. Everything else in
+> this panel works with it; the Console page simply never appears. To get the
+> Console page, install this fork's hyprmoncfg instead — it ships prebuilt
+> binaries on its [releases page](https://github.com/GustavoBelo/hyprmoncfg/releases).
 
 ## Staying up to date
 
