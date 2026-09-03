@@ -923,8 +923,11 @@ test("the panel explains the refusals it can", () => {
   assert.equal(Model.consoleActionEnabled(unhosted), false)
   assert.match(Model.consoleStatusLabel(unhosted), /console setup/)
 
+  // The panel chooses the display itself, on the Console page, so the advice
+  // stays inside the panel rather than sending the reader to the TUI for a
+  // setting this one owns.
   const unconfigured = Model.consoleInfo({ console: { configured: false, hosted: true } })
-  assert.equal(Model.consoleStatusLabel(unconfigured), "Pick the TV display in the TUI")
+  assert.equal(Model.consoleStatusLabel(unconfigured), "Choose the TV on the Console page")
 
   // Anything else the doctor found is shown as it was reported.
   const missing = Model.consoleInfo({

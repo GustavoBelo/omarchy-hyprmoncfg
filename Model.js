@@ -948,7 +948,12 @@ function consoleArming(state) {
 function consoleStatusLabel(state) {
   if (!state) return ""
   if (consoleArming(state)) return "Console mode starts in a moment"
-  if (!consoleConfigured(state)) return "Pick the TV display in the TUI"
+  // The action row is only built once a TV has been chosen, so this is a
+  // fallback rather than something shown today. It names the Console page
+  // because that is where the display is chosen: sending the reader to the TUI
+  // for a setting this panel owns is the kind of advice that outlives its
+  // reason.
+  if (!consoleConfigured(state)) return "Choose the TV on the Console page"
   if (!consoleHosted(state)) return "Run `hyprmoncfg console setup`, then log in again"
   var problems = (state && state.problems) || []
   if (problems.length > 0) return String(problems[0])
