@@ -63,4 +63,14 @@ jobs:
             fi
           } > notes.md
 
-          gh release create "$TAG" --title "$title" --notes-file notes.md
+          # A tag carrying a pre-release suffix must not become the latest
+          # release: someone installing the panel would be handed a version the
+          # tag itself says is not ready. Semver puts that suffix after a
+          # hyphen, which is the same rule goreleaser applies in the hyprmoncfg
+          # repository, so the two agree about what a release candidate is.
+          case "$TAG" in
+            *-*) set -- --prerelease ;;
+            *)   set -- ;;
+          esac
+
+          gh release create "$TAG" --title "$title" --notes-file notes.md "$@"
